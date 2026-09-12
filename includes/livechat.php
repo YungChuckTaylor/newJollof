@@ -179,7 +179,7 @@ final class LiveChat
     {
         $rows = DB::all(
             'SELECT a.*, d.name AS department_name,
-                    (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = \'active\') AS load,
+                    (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = \'active\') AS `load`,
                     (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = \'closed\') AS handled
                FROM chat_agents a
           LEFT JOIN chat_departments d ON d.id = a.department_id '
@@ -201,7 +201,7 @@ final class LiveChat
      */
     public static function availableAgents(?int $deptId, bool $onlineOnly = true): array
     {
-        $sql = "SELECT a.*, (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = 'active') AS load
+        $sql = "SELECT a.*, (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = 'active') AS `load`
                   FROM chat_agents a
                  WHERE a.is_active = 1 AND a.status IN (" . ($onlineOnly ? "'online'" : "'online','away'") . ')';
         $rows = DB::all($sql);
@@ -223,7 +223,7 @@ final class LiveChat
     {
         $a = DB::row(
             'SELECT a.*, d.name AS department_name,
-                    (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = \'active\') AS load,
+                    (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = \'active\') AS `load`,
                     (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = \'closed\') AS handled
                FROM chat_agents a LEFT JOIN chat_departments d ON d.id = a.department_id WHERE a.id = ?',
             [$id]
@@ -239,7 +239,7 @@ final class LiveChat
         }
         $a = DB::row(
             "SELECT a.*, d.name AS department_name,
-                    (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = 'active') AS load,
+                    (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = 'active') AS `load`,
                     (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id = a.id AND s.status = 'closed') AS handled
                FROM chat_agents a LEFT JOIN chat_departments d ON d.id = a.department_id
               WHERE a.user_id = ? AND a.is_active = 1 LIMIT 1",

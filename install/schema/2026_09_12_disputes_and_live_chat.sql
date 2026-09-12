@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS `chat_canned` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chat_canned_shortcut` (`shortcut`),
   KEY `idx_canned_scope` (`scope`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -251,26 +252,40 @@ INSERT IGNORE INTO `chat_canned` (`shortcut`, `title`, `body`, `scope`, `sort_or
 ('/bye',      'Polite close',         'Thank you for chatting with Jollof Living. I will email you a transcript of this conversation — enjoy the rest of your day!', 'global', 6);
 
 -- The agent console gets its own page metadata so the header/title resolve.
-INSERT IGNORE INTO `page_meta` (`page_key`, `title`, `description`) VALUES
-('agent', 'Live chat desk | Jollof Living', 'Work the live chat queues — reply to guests, claim and transfer chats, and keep the desk running.');
+-- `settings` and `page_meta` carry no UNIQUE key in the base schema, so
+-- INSERT IGNORE cannot deduplicate them: both seeds check first instead, which
+-- makes them safe to run any number of times.
+INSERT INTO `page_meta` (`page_key`, `title`, `description`)
+SELECT 'agent', 'Live chat desk | Jollof Living',
+       'Work the live chat queues — reply to guests, claim and transfer chats, and keep the desk running.'
+  FROM (SELECT 1) AS `one`
+  LEFT JOIN `page_meta` AS `existing` ON `existing`.`page_key` = 'agent'
+ WHERE `existing`.`page_key` IS NULL;
 
 -- Settings used by the live chat widget and console.
-INSERT IGNORE INTO `settings` (`skey`, `svalue`) VALUES
-('chat_enabled',        '1'),
-('chat_welcome',        'Welcome to Jollof Living 👋 Chat with our team about stays, bookings, payments or hosting. A specialist replies in about a minute.'),
-('chat_offline',        'Our team is offline right now. Leave your question here and we will reply by email — or ask Jollof, our AI concierge, for an instant answer.'),
-('chat_routing',        'fewest'),
-('chat_max_queue',      '25'),
-('chat_auto_close',     '30'),
-('chat_rating_enabled', '1'),
-('chat_hours',          '24/7 support · median first reply under 3 minutes'),
-('chat_transcript',     '1');
+INSERT INTO `settings` (`skey`, `svalue`)
+SELECT `seed`.`k`, `seed`.`v`
+  FROM (
+    SELECT 'chat_enabled'        AS k, '1' AS v UNION ALL
+    SELECT 'chat_welcome', 'Welcome to Jollof Living 👋 Chat with our team about stays, bookings, payments or hosting. A specialist replies in about a minute.' UNION ALL
+    SELECT 'chat_offline', 'Our team is offline right now. Leave your question here and we will reply by email — or ask Jollof, our AI concierge, for an instant answer.' UNION ALL
+    SELECT 'chat_routing', 'fewest' UNION ALL
+    SELECT 'chat_max_queue', '25' UNION ALL
+    SELECT 'chat_auto_close', '30' UNION ALL
+    SELECT 'chat_rating_enabled', '1' UNION ALL
+    SELECT 'chat_hours', '24/7 support · median first reply under 3 minutes' UNION ALL
+    SELECT 'chat_transcript', '1'
+  ) AS `seed`
+  LEFT JOIN `settings` AS `existing` ON `existing`.`skey` = `seed`.`k`
+ WHERE `existing`.`skey` IS NULL;
 
 -- The platform administrator doubles as the first chat agent so the console
 -- is never empty on a fresh install. Safe to run repeatedly.
 INSERT IGNORE INTO `chat_agents` (`user_id`, `name`, `email`, `agent_role`, `status`, `max_chats`, `is_active`, `signature`)
-SELECT `id`, `name`, `email`, 'supervisor', 'offline', 5, 1, 'Jollof Living support'
-  FROM `users`
- WHERE `role` = 'admin'
- ORDER BY `id`
+SELECT u.`id`, u.`name`, u.`email`, 'supervisor', 'offline', 5, 1, 'Jollof Living support'
+  FROM `users` u
+  LEFT JOIN `chat_agents` a ON a.`user_id` = u.`id` OR a.`email` = u.`email`
+ WHERE u.`role` = 'admin'
+   AND a.`id` IS NULL
+ ORDER BY u.`id`
  LIMIT 1;

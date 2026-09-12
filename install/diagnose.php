@@ -33,6 +33,63 @@ require_once $root . '/includes/bootstrap.php';
 
 $isAdmin = Auth::isAdmin();
 
+
+/**
+ * Identifiers MySQL reserves, that SQLite is happy to accept unquoted.
+ *
+ * `AS load` is the classic: the development rig runs on SQLite and works, the
+ * live host runs MySQL and answers with
+ *     SQLSTATE[42000] ... near 'load'
+ * Because it cannot be reproduced in the rig, the source text is checked here.
+ *
+ * @return array<int,array{file:string,line:int,kind:string,word:string}>
+ */
+function reserved_word_findings(): array
+{
+    static $reserved = null;
+    if ($reserved === null) {
+        $reserved = array_flip(explode(' ', 'ACCESSIBLE ADD ALL ALTER ANALYZE AND AS ASC ASENSITIVE BEFORE BETWEEN BIGINT BINARY BLOB BOTH BY CALL CASCADE CASE CHANGE CHAR CHARACTER CHECK COLLATE COLUMN CONDITION CONSTRAINT CONTINUE CONVERT CREATE CROSS CUBE CUME_DIST CURRENT_DATE CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR DATABASE DATABASES DAY_HOUR DAY_MICROSECOND DAY_MINUTE DAY_SECOND DEC DECIMAL DECLARE DEFAULT DELAYED DELETE DENSE_RANK DESC DESCRIBE DETERMINISTIC DISTINCT DISTINCTROW DIV DOUBLE DROP DUAL EACH ELSE ELSEIF EMPTY ENCLOSED ESCAPED EXCEPT EXISTS EXIT EXPLAIN FALSE FETCH FIRST_VALUE FLOAT FLOAT4 FLOAT8 FOR FORCE FOREIGN FROM FULLTEXT FUNCTION GENERATED GET GRANT GROUP GROUPING GROUPS HAVING HIGH_PRIORITY HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND IF IGNORE IN INDEX INFILE INNER INOUT INSENSITIVE INSERT INT INT1 INT2 INT3 INT4 INT8 INTEGER INTERSECT INTERVAL INTO IS ITERATE JOIN JSON_TABLE KEY KEYS KILL LAG LAST_VALUE LATERAL LEAD LEADING LEAVE LEFT LIKE LIMIT LINEAR LINES LOAD LOCALTIME LOCALTIMESTAMP LOCK LONG LONGBLOB LONGTEXT LOOP LOW_PRIORITY MATCH MAXVALUE MEDIUMBLOB MEDIUMINT MEDIUMTEXT MIDDLEINT MINUTE_MICROSECOND MINUTE_SECOND MOD MODIFIES NATURAL NOT NO_WRITE_TO_BINLOG NTH_VALUE NTILE NULL NUMERIC OF ON OPTIMIZE OPTION OPTIONALLY OR ORDER OUT OUTER OUTFILE OVER PARTITION PERCENT_RANK PRECISION PRIMARY PROCEDURE PURGE RANGE RANK READ READS READ_WRITE REAL RECURSIVE REFERENCES REGEXP RELEASE RENAME REPEAT REPLACE REQUIRE RESIGNAL RESTRICT RETURN REVOKE RIGHT RLIKE ROW ROWS ROW_NUMBER SCHEMA SCHEMAS SECOND_MICROSECOND SELECT SENSITIVE SEPARATOR SET SHOW SIGNAL SMALLINT SPATIAL SPECIFIC SQL SQLEXCEPTION SQLSTATE SQLWARNING SSL STARTING STORED STRAIGHT_JOIN SYSTEM TABLE TERMINATED THEN TINYBLOB TINYINT TINYTEXT TO TRAILING TRIGGER TRUE UNDO UNION UNIQUE UNLOCK UNSIGNED UPDATE USAGE USE USING UTC_DATE UTC_TIME UTC_TIMESTAMP VALUES VARBINARY VARCHAR VARCHARACTER VARYING VIRTUAL WHEN WHERE WHILE WINDOW WITH WRITE XOR YEAR_MONTH ZEROFILL'));
+    }
+
+    $files = array_merge(
+        glob(JL_INC . '/*.php') ?: [],
+        glob(JL_ROOT . '/api/*.php') ?: [],
+        glob(JL_ROOT . '/*.php') ?: [],
+        glob(JL_ROOT . '/install/schema/*.sql') ?: []
+    );
+
+    $out = [];
+    foreach ($files as $file) {
+        $isSql = str_ends_with($file, '.sql');
+        foreach (file($file) ?: [] as $i => $line) {
+            if (!$isSql && !preg_match('~\bselect\b|\bfrom\b|\bjoin\b|\binsert\b|\bupdate\b|\bdelete\b~i', $line)) {
+                continue;                       // only SQL-ish lines
+            }
+            if (!$isSql && preg_match('~(?:[A-Z]{2,}[ ,]){5,}~', $line)) {
+                continue;                       // a list of keywords, not a query
+            }
+            if ($isSql && preg_match('~^\s*--~', $line)) {
+                continue;                       // comment
+            }
+            if (preg_match_all('~\bAS\s+([A-Za-z_][A-Za-z0-9_]*)\b(?!`)~i', $line, $m)) {
+                foreach ($m[1] as $word) {
+                    if (isset($reserved[strtoupper($word)])) {
+                        $out[] = ['file' => basename(dirname($file)) . '/' . basename($file), 'line' => $i + 1, 'kind' => 'alias', 'word' => $word];
+                    }
+                }
+            }
+            if ($isSql && preg_match_all('~^\s*([A-Za-z_][A-Za-z0-9_]*)\s+(INT|BIGINT|VARCHAR|TEXT|TINYINT|DATETIME|TIMESTAMP|ENUM|DECIMAL|CHAR|SMALLINT)\b~i', $line, $m)) {
+                foreach ($m[1] as $word) {
+                    if (isset($reserved[strtoupper($word)])) {
+                        $out[] = ['file' => basename(dirname($file)) . '/' . basename($file), 'line' => $i + 1, 'kind' => 'column', 'word' => $word];
+                    }
+                }
+            }
+        }
+    }
+    return $out;
+}
+
 /* ------------------------------------------------------------------ probes */
 
 /** Every table the support module owns, with the columns the code expects. */
@@ -271,6 +328,8 @@ foreach ([
     $layout[] = [$rel, $here ? 'ok' : 'bad', $where];
 }
 
+$sqlWords = reserved_word_findings();
+
 $missingFiles = array_filter($fileState, static fn($f) => $f['file'] !== 'present');
 $brokenLoad = array_filter($fileState, static fn($f) => !$f['load']['ok']);
 $brokenProbes = array_filter($results, static fn($r) => !$r[1]['ok']);
@@ -285,12 +344,14 @@ render_diagnose(true, [
     'results' => $results,
     'logs' => $logs,
     'layout' => $layout,
+    'sqlwords' => $sqlWords,
     'summary' => [
         'missingFiles' => array_keys($missingFiles),
         'brokenLoad' => array_keys($brokenLoad),
         'brokenProbes' => array_map(static fn($r) => $r[0], $brokenProbes),
         'missingTables' => array_keys($missingTables),
         'drifted' => array_keys($drifted),
+        'sqlWords' => $sqlWords,
     ],
 ], $columns, $probes, $results);
 
@@ -366,7 +427,7 @@ function render_diagnose(bool $isAdmin, array $sections, array $columns, array $
 
       <?php $s = $sections['summary'] ?? []; ?>
       <div class="note">
-        <?php if (!$s['missingFiles'] && !$s['brokenLoad'] && !$s['brokenProbes'] && !$s['missingTables'] && !$s['drifted']): ?>
+        <?php if (!$s['missingFiles'] && !$s['brokenLoad'] && !$s['brokenProbes'] && !$s['missingTables'] && !$s['drifted'] && !$s['sqlWords']): ?>
           <b class="ok">All clear.</b> Every table, file and payload call the support module needs works on this server.
           If a page still fails, the cause is elsewhere — check the error log below and the browser console.
         <?php else: ?>
@@ -377,6 +438,7 @@ function render_diagnose(bool $isAdmin, array $sections, array $columns, array $
             <?php foreach ($s['missingTables'] as $t): ?><li>Table <code><?= e($t) ?></code> is missing — run <a href="<?= e(url('install/migrate.php')) ?>">install/migrate.php</a>.</li><?php endforeach; ?>
             <?php foreach ($s['drifted'] as $t): ?><li>Table <code><?= e($t) ?></code> exists but is not the shape this version expects — the migration may have failed halfway. Re-run it.</li><?php endforeach; ?>
             <?php foreach ($s['brokenProbes'] as $p): ?><li><code><?= e($p) ?></code> throws — see the payload section.</li><?php endforeach; ?>
+            <?php foreach ($s['sqlWords'] as $hit): ?><li><code><?= e($hit['file']) ?></code> line <?= (int) $hit['line'] ?> uses <code><?= e($hit['word']) ?></code> as <?= e($hit['kind']) ?> — MySQL reserves that word; it needs back-quotes.</li><?php endforeach; ?>
           </ul>
         <?php endif; ?>
       </div>
@@ -455,7 +517,26 @@ function render_diagnose(bool $isAdmin, array $sections, array $columns, array $
         </tbody>
       </table>
 
-      <h2>6 · Error log</h2>
+      <h2>6 · SQL identifiers MySQL reserves</h2>
+      <p class="sub">SQLite accepts these unquoted, MySQL rejects them with
+        <code>SQLSTATE[42000] … near '&lt;word&gt;'</code> — the reason a module can pass every test in
+        development and fail on this host. Aliases must be back-quoted: <code>AS `load`</code>.</p>
+      <?php if (!$sections['sqlwords']): ?>
+        <p class="ok"><b>Clean</b> — no unquoted reserved identifiers in includes/, api/ or install/schema/.</p>
+      <?php else: ?>
+        <table>
+          <thead><tr><th>File</th><th>Line</th><th>Kind</th><th>Word</th></tr></thead>
+          <tbody>
+          <?php foreach ($sections['sqlwords'] as $hit): ?>
+            <tr><td><code><?= e($hit['file']) ?></code></td><td><?= (int) $hit['line'] ?></td>
+                <td><?= e($hit['kind']) ?></td><td class="bad"><code><?= e($hit['word']) ?></code></td></tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+        <p class="bad">Upload the current <b>includes/livechat.php</b> from the update zip, then re-run this check.</p>
+      <?php endif; ?>
+
+      <h2>7 · Error log</h2>
       <?php if (!$sections['logs']): ?>
         <p class="sub">No log file found. Set <code>'debug' =&gt; true</code> in <code>includes/config.php</code>,
         reload the failing page, and the error will be printed on screen instead.</p>

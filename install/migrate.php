@@ -43,6 +43,14 @@ $errors = [];
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()) {
     try {
+        // Make sure the seed tables that rely on INSERT IGNORE still have the
+        // unique key that makes it idempotent — the first release of this
+        // migration shipped chat_canned/chat_agents without one, so a re-run
+        // would have duplicated those rows. Runs before the SQL on purpose.
+        foreach (ensure_seed_keys() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -178,6 +186,90 @@ function seed_defaults(): array
     return $notes;
 }
 
+/**
+ * Keys the seed rows depend on, plus a tidy-up of any duplicates an earlier run
+ * of the migration may already have created.
+ *
+ * @return string[] notes for the operator
+ */
+function ensure_seed_keys(): array
+{
+    $notes = [];
+    $wanted = [
+        ['chat_canned',  'uq_chat_canned_shortcut', ['shortcut'], true],
+        ['chat_agents',  'uq_chat_agent_email',     ['email'],    true],
+        ['settings',     'uq_settings_key',         ['skey'],     false],
+        ['page_meta',    'uq_page_meta_key',        ['page_key'], false],
+    ];
+    foreach ($wanted as [$table, $index, $cols, $dedupe]) {
+        $note = ensure_unique_index($table, $index, $cols, $dedupe);
+        if ($note !== '') {
+            $notes[] = $note;
+        }
+    }
+    return $notes;
+}
+
+/**
+ * Make sure a UNIQUE index exists, so `INSERT IGNORE` seed rows stay idempotent
+ * when this migration is run again.
+ *
+ * Returns a note for the operator, or '' when nothing needed doing. A failure
+ * is reported rather than thrown: if the table already holds duplicates, the
+ * index cannot be added and the operator has to clean them up first.
+ *
+ * @param string[] $cols
+ */
+function ensure_unique_index(string $table, string $index, array $cols, bool $dedupe = false): string
+{
+    try {
+        if (!DB::tableExists($table)) {
+            return '';
+        }
+        if (DB::isSqlite()) {
+            foreach (DB::all('PRAGMA index_list(' . $table . ')') as $idx) {
+                if (($idx['name'] ?? '') === $index) {
+                    return '';
+                }
+            }
+        } else {
+            $exists = DB::value(
+                'SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
+                [$table, $index]
+            );
+            if ($exists) {
+                return '';
+            }
+        }
+        // An earlier run may have inserted the seed rows more than once; keep
+        // the oldest of each set so the key can be added.
+        $removed = 0;
+        if ($dedupe) {
+            $first = '`' . $cols[0] . '`';
+            try {
+                if (DB::isSqlite()) {
+                    $removed = DB::pdo()->exec(
+                        'DELETE FROM `' . $table . '` WHERE `id` NOT IN (SELECT MIN(`id`) FROM `' . $table . '` GROUP BY ' . $first . ')'
+                    ) ?: 0;
+                } else {
+                    $removed = DB::pdo()->exec(
+                        'DELETE a FROM `' . $table . '` a JOIN `' . $table . '` b ON a.' . $first . ' = b.' . $first . ' AND a.`id` > b.`id`'
+                    ) ?: 0;
+                }
+            } catch (Throwable $e) {
+                // Not fatal: the ALTER below reports the real problem.
+            }
+        }
+        $quoted = implode(', ', array_map(static fn($c) => '`' . $c . '`', $cols));
+        DB::pdo()->exec('ALTER TABLE `' . $table . '` ADD UNIQUE KEY `' . $index . '` (' . $quoted . ')');
+        return 'Added the missing ' . $index . ' key on ' . $table . '.'
+            . ($removed > 0 ? ' Removed ' . $removed . ' duplicate row(s) an earlier run created.' : '');
+    } catch (Throwable $e) {
+        return 'Could not add ' . $index . ' on ' . $table . ' (' . $e->getMessage() . '). '
+            . 'If the migration was run more than once, delete the duplicate rows there and run it again.';
+    }
+}
+
 /** Split a SQL script into statements, honouring strings, backticks and comments. */
 function split_sql(string $sql): array
 {
@@ -243,6 +335,9 @@ function sqlite_translate(string $sql): string
     }
     $sql = preg_replace('~,\s*(UNIQUE\s+)?KEY\s+`?\w+`?\s*\([^)]*\)~i', '', $sql) ?? $sql;
     $sql = preg_replace('~,\s*\)~', ')', $sql) ?? $sql;
+    // `INSERT IGNORE` is MySQL only; SQLite spells it `INSERT OR IGNORE`.
+    // This is what keeps the seed rows idempotent on the SQLite dev driver.
+    $sql = str_ireplace('INSERT IGNORE', 'INSERT OR IGNORE', $sql);
     return trim($sql);
 }
 

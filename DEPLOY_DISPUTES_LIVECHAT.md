@@ -17,7 +17,7 @@ Two things fix almost every deployment problem:
    https://yourdomain.com/jollof/install/diagnose.php
    ```
 
-   It prints your PHP version and extensions, whether each of the 10 tables exists **with the columns this version expects**, **where the uploaded files actually landed** (a zip extracted one level above the live folder is the single most common cause of “nothing changed” or a mixed-version 500), whether each module file loads, the calls `admin.php` makes before the support module even loads (`cms_blocks`, `campaigns`, revenue, admin state), and the exact calls `help.php` / `agent.php` / `admin.php` make — each in isolation, so the broken piece names itself. It also prints the tail of the PHP error log. Read-only.
+   It prints your PHP version and extensions, whether each of the 10 tables exists **with the columns this version expects**, **where the uploaded files actually landed** (a zip extracted one level above the live folder is the single most common cause of “nothing changed” or a mixed-version 500), whether each module file loads, the calls `admin.php` makes before the support module even loads (`cms_blocks`, `campaigns`, revenue, admin state), the exact calls `help.php` / `agent.php` / `admin.php` make — each in isolation, so the broken piece names itself — **§6 a reserved-word scan of your SQL** (see §0b), and the tail of the PHP error log and of the trap log. Read-only.
 
 3. **If a page still 500s, run the trap:**
 
@@ -29,6 +29,20 @@ Two things fix almost every deployment problem:
    It runs that page in its own request and prints the fatal error the host hides, plus a plain-English note on what that error means. The same line is written to `storage/logs/jollof-trap.log`, which the self-check displays.
 
 If you want the raw error on screen instead, set `'debug' => true` in `includes/config.php`, reload the failing page, then set it back.
+
+### 0b. If the self-check says *“LiveChat::agentForUser(me) throws”*
+
+The error is
+
+```
+SQLSTATE[42000]: … 1064 … near 'load', (SELECT COUNT(*) FROM chat_sessions s WHERE s.agent_id'
+```
+
+`load` is a **reserved word in MySQL** (SQLite tolerates it, which is why it only broke on your live site). `includes/livechat.php` used it as a column alias in four queries, so every page that asks “is this user a chat agent?” — `admin.php`, `agent.php`, the chat API — failed once the module was installed.
+
+**Fix:** re-upload **`includes/livechat.php`** from this zip. The aliases are now quoted (``AS `load` ``). Nothing in the database needs changing.
+
+The self-check’s **§6 Reserved-word scan** watches for this whole class of bug from now on: it reads every `SELECT`/`UPDATE` line in `includes/`, `api/`, the root pages and `install/schema/*.sql` and flags any reserved word used *unquoted*. If your live site ever 500s again after an update, check that section first — it is usually the answer.
 
 ---
 
@@ -47,7 +61,7 @@ If you want the raw error on screen instead, set `'debug' => true` in `includes/
 | `install/migrate.php` | Browser migration runner for a live site |
 | `install/diagnose.php` | Self-check page (see §0) |
 | `install/why.php` | “Why is this page failing?” trap — runs one page and prints its fatal error (see §0) |
-| `install/schema/2026_09_12_disputes_and_live_chat.sql` | The migration itself — 10 tables + seed rows |
+| `install/schema/2026_09_12_disputes_and_live_chat.sql` | The migration itself — 10 tables + seed rows. Safe to import repeatedly: seeds are guarded and the seeded tables carry `UNIQUE` keys, so re-running never duplicates a queue, a canned reply or an agent |
 
 ### Existing files that must be replaced (the update patches them)
 
@@ -65,7 +79,7 @@ If you want the raw error on screen instead, set `'debug' => true` in `includes/
 
 10 new tables — `dispute_categories`, `disputes`, `dispute_events`, `chat_departments`, `chat_agents`, `chat_agent_departments`, `chat_sessions`, `chat_messages`, `chat_events`, `chat_canned` — plus seed rows: 8 dispute categories (4–72 h service levels), 5 chat queues, 7 canned replies, 9 chat settings, page metadata for `/agent.php`, and your administrator account linked as the first **supervisor** agent.
 
-Every statement is idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT IGNORE`). **No existing table is altered, renamed or dropped.**
+Every statement is idempotent (`CREATE TABLE IF NOT EXISTS`; seeds are written as `INSERT … SELECT … LEFT JOIN … WHERE … IS NULL`, and every seeded table carries a `UNIQUE` key (`chat_departments.slug`, `chat_canned.shortcut`, `chat_agents.email`, `dispute_categories.slug`, plus the composite `(agent_id, department_id)` primary key on `chat_agent_departments`) so repeats cannot duplicate rows). **You can run it as many times as you like** — the browser runner re-checks the row counts after every run and reports them. **No existing table is altered, renamed or dropped.**
 
 ---
 
@@ -80,7 +94,7 @@ Those two files are your rollback.
 
 ## 3. Upload the files
 
-The update zip **[`jollof-update-disputes-livechat.zip`](jollof-update-disputes-livechat.zip)** (182 KB, 14 files) has **no wrapper folder** — the paths inside it (`agent.php`, `api/…`, `assets/…`, `includes/…`, `install/…`) are exactly the layout of the folder that holds your `admin.php`.
+The update zip **[`jollof-update-disputes-livechat.zip`](jollof-update-disputes-livechat.zip)** (193 KB, 15 files) has **no wrapper folder** — the paths inside it (`agent.php`, `api/…`, `assets/…`, `includes/…`, `install/…`) are exactly the layout of the folder that holds your `admin.php`.
 
 **Find that folder:** it is wherever `admin.php` lives. If your site opens at `https://yoursite.com/jollof/admin.php`, that folder is `public_html/jollof`. If it opens at `https://yoursite.com/admin.php`, it is `public_html`.
 
@@ -90,7 +104,7 @@ The update zip **[`jollof-update-disputes-livechat.zip`](jollof-update-disputes-
 1. cPanel → **File Manager** → open the folder containing `admin.php` (e.g. `public_html/jollof`).
 2. **Upload** `jollof-update-disputes-livechat.zip` there.
 3. Right-click the uploaded zip → **Extract** → confirm → then delete the zip.
-4. Confirm 14 files landed, e.g. `…/jollof/agent.php`, `…/jollof/includes/livechat.php`, `…/jollof/assets/js/chat.js`, `…/jollof/install/diagnose.php`.
+4. Confirm the files landed, e.g. `…/jollof/agent.php`, `…/jollof/includes/livechat.php`, `…/jollof/assets/js/chat.js`, `…/jollof/install/diagnose.php`, `…/jollof/install/schema/2026_09_12_disputes_and_live_chat.sql`. (15 files: 14 for the app plus this guide, `DEPLOY_DISPUTES_LIVECHAT.md`, which you can delete afterwards.)
 
 Permissions: files `644`, folders `755` (cPanel’s defaults). Never overwrite `includes/config.php`.
 
