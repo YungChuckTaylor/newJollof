@@ -80,6 +80,28 @@ final class View
             'takeRate'      => (float) Repo::setting('host_take_rate', 0.12),
         ];
 
+        /* The dispute centre and the live chat desk only exist once the
+           migration has run; ask for their data per page so the payload stays
+           small, and never break a page because the tables are not there yet. */
+        if (in_array($page, ['help', 'agent', 'admin'], true)) {
+            if (DB::tableExists('disputes')) {
+                require_once JL_INC . '/disputes.php';
+                $data['disputeCategories'] = DisputeService::categories();
+                $data['disputeWants']      = DisputeService::WANTS;
+                $data['disputeOutcomes']   = DisputeService::OUTCOMES;
+                $data['disputeStats']      = DisputeService::stats();
+                $data['disputes']          = $uid ? DisputeService::forUser($uid, 12) : [];
+            }
+            if (DB::tableExists('chat_sessions')) {
+                require_once JL_INC . '/livechat.php';
+                $data['chat'] = [
+                    'settings'    => LiveChat::settings(),
+                    'departments' => LiveChat::departments(true),
+                ];
+                $data['chatAgent'] = $uid ? LiveChat::agentForUser($uid) : null;
+            }
+        }
+
         if (Auth::isAdmin()) {
             $data['admin'] = Repo::adminState();
             $data['adminStats'] = Repo::adminStats();
@@ -465,6 +487,7 @@ final class View
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 21l1.6-5A8.5 8.5 0 1 1 21 12z"/></svg>
 </button>
 
+<script src="<?= e(asset('assets/js/chat.js')) ?>" defer></script>
 <script src="<?= e(asset('assets/js/site.js')) ?>" defer></script>
 </body>
 </html>

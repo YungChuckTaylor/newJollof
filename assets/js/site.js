@@ -238,6 +238,7 @@ const PAGE_MAP = {
   "/app": "app.php",
   "/future": "future.php",
   "/concierge": "concierge.php",
+  "/agent": "agent.php",
   "/messages": "messages.php",
   "/notifications": "notifications.php",
   "/trips": "trips.php",
@@ -3504,14 +3505,11 @@ function pHelp(q){
     <div class="grid-3" style="margin-top:30px">
       ${[["chat","24/7 live chat","Chat with the team or Jollof AI",URL("/concierge")],["phone","Call us","+234 700 JOLLOF (24/7)",URL("/concierge")],["send","Email support","care@jollofliving.com",URL("/concierge")]].map(c=>`
       <div class="panel" style="text-align:center"><div class="why-ico" style="margin:0 auto 12px">${I[c[0]]}</div>
-      <b style="font-family:var(--fs-serif);font-size:19px">${c[1]}</b><p class="small">${c[2]}</p><a class="link-arrow" style="font-size:11.5px" href="${c[3]}">Open ${I.arrow}</a></div>`).join("")}
+      <b style="font-family:var(--fs-serif);font-size:19px">${c[1]}</b><p class="small">${c[2]}</p>
+      ${c[1].indexOf("live chat")>-1?`<button class="link-arrow" style="font-size:11.5px" onclick="liveChatOpen()">Start chatting ${I.arrow}</button>`:`<a class="link-arrow" style="font-size:11.5px" href="${c[3]}">Open ${I.arrow}</a>`}</div>`).join("")}
     </div>
     <div class="grid-2" style="margin-top:24px">
-      <div class="panel"><h3 style="font-size:20px">${I.scale} Dispute resolution</h3>
-        <p class="muted" style="font-size:14px;margin-bottom:8px">Structured, fair and fast — most disputes resolve within 48 hours.</p>
-        ${[["1","Raise a dispute","From any booking, one tap."],["2","Both sides share evidence","Photos, messages, receipts."],["3","Fair outcome","Refunds, rebooking or mediation."]].map(s=>`<div class="krow"><span class="k"><b class="gold-text">${s[0]}</b> ${s[1]}</span><span class="v small">${s[2]}</span></div>`).join("")}
-        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="toast('Dispute #D-4412 drafted — a mediator replies within hours','scale')">File a dispute</button>
-      </div>
+      <div id="disputeCentre">${typeof dcPanel==="function"?dcPanel():""}</div>
       <div class="panel"><h3 style="font-size:20px">${I.chatBell} Emergency assistance</h3>
         <p class="muted" style="font-size:14px;margin-bottom:10px">One-tap access, wherever you are in Nigeria.</p>
         <div class="grid-2">${[["Police","112"],["Fire","112"],["Ambulance","112"]].map(e=>`<button class="btn btn-ghost btn-sm" onclick="toast('Dialling ${e[1]}…','phone')">${e[0]} · ${e[1]}</button>`).join("")}
@@ -3530,6 +3528,8 @@ function bindHelp(){
     nav("/help?q="+encodeURIComponent(v)); });
   $("#helpSearch").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#helpGo").click(); });
   $$("#helpCats .tab").forEach(t=>t.addEventListener("click",()=>nav("/help?cat="+t.dataset.hc)));
+  /* the resolution centre is database-backed; wire it once the panel is in the DOM */
+  if (typeof bindDisputes === "function") bindDisputes();
 }
 
 /* ---------------- BUSINESS ---------------- */
@@ -3618,7 +3618,7 @@ function bindAdminLogin(){
 function pAdmin(q){
   if(!admIn()) return pAdminLogin();   // gate: back office requires sign-in
   const tab=(q&&q.tab)||"dashboard";
-  const nav=[["dashboard","Dashboard","grid"],["moderation","Listings moderation","eye"],["users","User management","users"],["promotions","Promotions & campaigns","gift"],["fraud","Fraud detection","shield"],["cms","Content (CMS)","doc"],["reports","Reports & analytics","scale"],["roles","Roles & permissions","lock"],["audit","Audit log","book"]];
+  const nav=[["dashboard","Dashboard","grid"],["moderation","Listings moderation","eye"],["users","User management","users"],["promotions","Promotions & campaigns","gift"],["fraud","Fraud detection","shield"],["chat","Live chat desk","chat"],["disputes","Dispute resolution","scale"],["cms","Content (CMS)","doc"],["reports","Reports & analytics","scale"],["roles","Roles & permissions","lock"],["audit","Audit log","book"]];
   // The header badges report real figures: GMV for the last 30 days and the
   // take rate actually configured in settings, not fixed sample numbers.
   const KH=ADMIN_STATS||{};
@@ -3635,7 +3635,7 @@ function pAdmin(q){
       <nav class="admin-nav"><div class="sec">Admin</div>
         ${nav.map(([k,l,i])=>`<a href="${URL("/admin")}?tab=${k}" class="${tab===k?"active":""}">${I[i]} ${l}</a>`).join("")}
       </nav>
-      <div>${(()=>{ const m=[["dashboard",admDashboard],["moderation",admModeration],["users",admUsers],["promotions",admPromotions],["fraud",admFraud],["cms",adCMS],["reports",admReports],["roles",admRoles],["audit",admAudit]].find(([k])=>k===tab)||["dashboard",admDashboard]; return m[1](); })()}</div>
+      <div>${(()=>{ const m=[["dashboard",admDashboard],["moderation",admModeration],["users",admUsers],["promotions",admPromotions],["fraud",admFraud],["chat",()=>`<div id="admChatHost">${admChatHostHTML()}</div>`],["disputes",()=>`<div id="admDisputeHost">${admDisputesHostHTML()}</div>`],["cms",adCMS],["reports",admReports],["roles",admRoles],["audit",admAudit]].find(([k])=>k===tab)||["dashboard",admDashboard]; return m[1](); })()}</div>
     </div>
   </div></div>`;
 }
@@ -4051,6 +4051,7 @@ const PAGE_RENDER = {
   app:              () => ({ html: pApp() }),
   future:           () => ({ html: pFuture() }),
   concierge:        () => ({ html: pConcierge(qps()), bind: bindConcierge }),
+  agent:            () => ({ html: pAgent(qps()), bind: bindAgent }),
   messages:         () => ({ html: pMessages(qps()), bind: bindMessages }),
   notifications:    () => ({ html: pNotif() }),
   trips:            () => ({ html: pTrips(qps()), bind: bindTrips }),
@@ -4163,7 +4164,9 @@ $("#drawer").addEventListener("click", (e) => { if (e.target.closest("a")) close
 $("#notifBtn").addEventListener("click", () => nav("/notifications"));
 $("#msgBtn").addEventListener("click", () => nav("/messages"));
 $("#wlBtn").addEventListener("click", () => nav("/wishlist"));
-$("#chatFab").addEventListener("click", () => nav("/concierge"));
+/* The floating button opens the live chat desk. The AI concierge stays one tap
+   away inside the widget (and in the drawer). */
+$("#chatFab").addEventListener("click", () => { if (typeof liveChatOpen === "function") liveChatOpen(); else nav("/concierge"); });
 
 /* ---------------- currency ---------------- */
 const curSel = $("#currencySel");
@@ -4204,3 +4207,5 @@ function observeReveals() {
 $("#yearNow").textContent = new Date().getFullYear();
 applyTheme(store.get("theme", "dark"));
 render();
+/* the live chat desk boots behind the scenes: the widget only fetches when opened */
+if (typeof liveChatBoot === "function") liveChatBoot();
