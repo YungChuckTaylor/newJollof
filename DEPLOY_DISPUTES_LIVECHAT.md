@@ -17,9 +17,18 @@ Two things fix almost every deployment problem:
    https://yourdomain.com/jollof/install/diagnose.php
    ```
 
-   It prints your PHP version, whether each of the 10 tables exists **with the columns this version expects**, whether each module file loads, and it runs the exact calls the pages make — each one in isolation, so the broken piece names itself. It also prints the tail of the PHP error log, and it is read-only.
+   It prints your PHP version and extensions, whether each of the 10 tables exists **with the columns this version expects**, **where the uploaded files actually landed** (a zip extracted one level above the live folder is the single most common cause of “nothing changed” or a mixed-version 500), whether each module file loads, the calls `admin.php` makes before the support module even loads (`cms_blocks`, `campaigns`, revenue, admin state), and the exact calls `help.php` / `agent.php` / `admin.php` make — each in isolation, so the broken piece names itself. It also prints the tail of the PHP error log. Read-only.
 
-If you want the raw error text on screen instead, set `'debug' => true` in `includes/config.php`, reload the failing page, then set it back.
+3. **If a page still 500s, run the trap:**
+
+   ```
+   https://yourdomain.com/jollof/install/why.php            ← tests admin.php
+   https://yourdomain.com/jollof/install/why.php?page=help.php
+   ```
+
+   It runs that page in its own request and prints the fatal error the host hides, plus a plain-English note on what that error means. The same line is written to `storage/logs/jollof-trap.log`, which the self-check displays.
+
+If you want the raw error on screen instead, set `'debug' => true` in `includes/config.php`, reload the failing page, then set it back.
 
 ---
 
@@ -37,6 +46,7 @@ If you want the raw error text on screen instead, set `'debug' => true` in `incl
 | `agent.php` | The agent workspace page (`/agent.php`) |
 | `install/migrate.php` | Browser migration runner for a live site |
 | `install/diagnose.php` | Self-check page (see §0) |
+| `install/why.php` | “Why is this page failing?” trap — runs one page and prints its fatal error (see §0) |
 | `install/schema/2026_09_12_disputes_and_live_chat.sql` | The migration itself — 10 tables + seed rows |
 
 ### Existing files that must be replaced (the update patches them)
@@ -70,7 +80,7 @@ Those two files are your rollback.
 
 ## 3. Upload the files
 
-The update zip **[`jollof-update-disputes-livechat.zip`](jollof-update-disputes-livechat.zip)** (177 KB, 13 files) has **no wrapper folder** — the paths inside it (`agent.php`, `api/…`, `assets/…`, `includes/…`, `install/…`) are exactly the layout of the folder that holds your `admin.php`.
+The update zip **[`jollof-update-disputes-livechat.zip`](jollof-update-disputes-livechat.zip)** (182 KB, 14 files) has **no wrapper folder** — the paths inside it (`agent.php`, `api/…`, `assets/…`, `includes/…`, `install/…`) are exactly the layout of the folder that holds your `admin.php`.
 
 **Find that folder:** it is wherever `admin.php` lives. If your site opens at `https://yoursite.com/jollof/admin.php`, that folder is `public_html/jollof`. If it opens at `https://yoursite.com/admin.php`, it is `public_html`.
 
@@ -80,7 +90,7 @@ The update zip **[`jollof-update-disputes-livechat.zip`](jollof-update-disputes-
 1. cPanel → **File Manager** → open the folder containing `admin.php` (e.g. `public_html/jollof`).
 2. **Upload** `jollof-update-disputes-livechat.zip` there.
 3. Right-click the uploaded zip → **Extract** → confirm → then delete the zip.
-4. Confirm 13 files landed, e.g. `…/jollof/agent.php`, `…/jollof/includes/livechat.php`, `…/jollof/assets/js/chat.js`, `…/jollof/install/diagnose.php`.
+4. Confirm 14 files landed, e.g. `…/jollof/agent.php`, `…/jollof/includes/livechat.php`, `…/jollof/assets/js/chat.js`, `…/jollof/install/diagnose.php`.
 
 Permissions: files `644`, folders `755` (cPanel’s defaults). Never overwrite `includes/config.php`.
 
@@ -138,7 +148,8 @@ Permissions: files `644`, folders `755` (cPanel’s defaults). Never overwrite `
 
 | Symptom | Cause / fix |
 |---|---|
-| **`admin.php` shows HTTP ERROR 500** | Fixed by the guarded payload in the new `includes/view.php` — make sure you uploaded it. If the page still fails, the cause is *not* the support module: open `…/jollof/install/diagnose.php`, which runs `View::payload("admin")` and `View::header("admin")` and prints the exact exception, or set `'debug' => true` in `includes/config.php` temporarily to see it on the page itself. |
+| **`admin.php` shows HTTP ERROR 500** | Fixed by the guarded payload in the new `includes/view.php` — make sure you uploaded it. If it still fails: run `…/jollof/install/why.php`, which prints the fatal error itself (and writes it to `storage/logs/jollof-trap.log`, shown by the self-check). The self-check also runs every query `admin.php` makes before the support module loads, so a database missing `cms_blocks`, `campaigns` or similar is named too. |
+| The self-check reports **problems** in its red summary | Start at the top: a missing file means a partial upload, “exists but is not the shape this version expects” means the migration half-ran (run `install/migrate.php` again), and a red row in §4 is the exact call that throws — the message next to it is the answer. |
 | Chat bubble still opens the AI concierge / the dispute panel still shows the old mock button | Old JS is cached or `assets/js/site.js` was not replaced. Hard-refresh (`Ctrl` + `F5`) and confirm both `chat.js` and `site.js` are in the live folder. Asset URLs are cache-busted by file time. |
 | An API reply says `needsMigration` | Step 4 has not run against the database in `includes/config.php`. |
 | The site still looks exactly as before after extracting | The zip was extracted **outside** the folder holding `admin.php` (see the warning in §3). Re-extract one level deeper. |

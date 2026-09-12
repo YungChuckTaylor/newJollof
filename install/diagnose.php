@@ -192,6 +192,13 @@ $probes = [
     'LiveChat::settings()'               => static fn() => json_encode(LiveChat::settings()),
     'LiveChat::departments(true)'        => static fn() => count(LiveChat::departments(true)) . ' active queues',
     'LiveChat::agentForUser(me)'         => static fn() => json_encode(LiveChat::agentForUser($uid)),
+    'admin.php: cms_blocks'              => static fn() => count(DB::all('SELECT * FROM cms_blocks ORDER BY id')) . ' CMS blocks',
+    'admin.php: campaigns'               => static fn() => count(DB::all('SELECT * FROM campaigns ORDER BY id')) . ' campaigns',
+    'admin.php: users by role'           => static fn() => count(DB::all('SELECT role, COUNT(*) AS n FROM users GROUP BY role ORDER BY n DESC')) . ' role rows',
+    'admin.php: Repo::revenueSeries(12)' => static fn() => count(Repo::revenueSeries(12)) . ' months of revenue',
+    'admin.php: Repo::revenueByCity()'   => static fn() => count(Repo::revenueByCity()) . ' cities',
+    'admin.php: Repo::adminState()'      => static fn() => 'ok — ' . count((array) Repo::adminState()) . ' keys',
+    'admin.php: Repo::adminStats()'      => static fn() => 'ok — ' . count((array) Repo::adminStats()) . ' keys',
     'View::payload("admin")'             => static function () {
         require_once JL_INC . '/view.php';
         $p = View::payload('admin');
@@ -228,14 +235,40 @@ foreach ($probes as $label => $fn) {
 
 /* ------------------------------------------------------------------- logs */
 
-$logFiles = array_filter([
-    (string) ini_get('error_log'),
-    JL_ROOT . '/../storage/logs/php-error.log',
-    JL_ROOT . '/storage/logs/php-error.log',
-], static fn($p) => $p !== '' && is_file($p));
+$parent = dirname(JL_ROOT);
+$logFiles = array_filter(array_merge(
+    [(string) ini_get('error_log')],
+    glob(JL_ROOT . '/error_log') ?: [],
+    glob(JL_ROOT . '/../storage/logs/*.log') ?: [],
+    glob(JL_ROOT . '/storage/logs/*.log') ?: [],
+    glob($parent . '/logs/*.log') ?: [],
+    glob($parent . '/../logs/*.log') ?: []
+), static fn($p) => $p !== '' && is_file($p) && is_readable($p));
+$logFiles = array_slice(array_unique($logFiles), 0, 4);
 $logs = [];
 foreach (array_unique($logFiles) as $path) {
     $logs[$path] = tail_file($path, 40);
+}
+
+/* Where did the upload land? The layout matters more than anything else on a
+   subfolder install: a zip extracted one level too high leaves the live app
+   untouched, and the two "copies found elsewhere" rows below prove it. */
+$layout = [];
+foreach ([
+    'agent.php', 'includes/view.php', 'includes/disputes.php', 'includes/livechat.php',
+    'assets/js/chat.js', 'assets/js/site.js', 'assets/css/site.css',
+    'api/chat.php', 'api/dispute.php', 'install/migrate.php',
+    'install/schema/2026_09_12_disputes_and_live_chat.sql',
+] as $rel) {
+    $here = is_file(JL_ROOT . '/' . $rel);
+    $above = is_file($parent . '/' . $rel);
+    $nested = is_file(JL_ROOT . '/public_html/' . $rel);
+    $sibling = is_file($parent . '/public_html/' . $rel);
+    $where = $here ? 'in the live folder'
+        : ($above ? 'ONE LEVEL TOO HIGH — in ' . $parent
+        : ($sibling ? 'in ' . $parent . '/public_html'
+        : ($nested ? 'in a nested ' . JL_ROOT . '/public_html' : 'not found in any neighbouring folder')));
+    $layout[] = [$rel, $here ? 'ok' : 'bad', $where];
 }
 
 $missingFiles = array_filter($fileState, static fn($f) => $f['file'] !== 'present');
@@ -251,6 +284,7 @@ render_diagnose(true, [
     'files' => $fileState,
     'results' => $results,
     'logs' => $logs,
+    'layout' => $layout,
     'summary' => [
         'missingFiles' => array_keys($missingFiles),
         'brokenLoad' => array_keys($brokenLoad),
@@ -259,6 +293,21 @@ render_diagnose(true, [
         'drifted' => array_keys($drifted),
     ],
 ], $columns, $probes, $results);
+
+/* Running the real pages in *this* request is impossible: the framework is
+   already loaded here, so including admin.php would re-declare its functions
+   and fatal. install/why.php exists for that: it traps the fatal in a fresh
+   request and prints the message. */
+if (isset($_GET['full']) && $isAdmin) {
+    echo '<div class="card"><h2>Run the real pages</h2>'
+        . '<p>This report cannot include the pages themselves (the framework is already loaded in this request). '
+        . 'Use the trap page, which runs one page in its own request and prints the fatal it produces:</p>'
+        . '<p>'
+        . '<a href="' . e(url('install/why.php?page=admin.php')) . '">admin.php</a> · '
+        . '<a href="' . e(url('install/why.php?page=help.php')) . '">help.php</a> · '
+        . '<a href="' . e(url('install/why.php?page=agent.php')) . '">agent.php</a> · '
+        . '<a href="' . e(url('install/why.php')) . '">why.php</a></p></div></body></html>';
+}
 
 /* ------------------------------------------------------------------- view */
 
@@ -390,7 +439,23 @@ function render_diagnose(bool $isAdmin, array $sections, array $columns, array $
         </tbody>
       </table>
 
-      <h2>5 · Error log</h2>
+      <h2>5 · Where the files are</h2>
+      <p class="sub">Every path below is relative to the folder this site runs from:
+        <code><?= e(JL_ROOT) ?></code>. If a row says <b class="bad">ONE LEVEL TOO HIGH</b>,
+        the zip was extracted outside the live application — extract it again into the folder
+        that holds <code>admin.php</code>.</p>
+      <table>
+        <thead><tr><th>File</th><th>In place</th><th>Found</th></tr></thead>
+        <tbody>
+        <?php foreach ($sections['layout'] ?? [] as [$rel, $state, $where]): ?>
+          <tr><td><code><?= e($rel) ?></code></td>
+              <td><span class="pill <?= $state ?>"><?= $state === 'ok' ? 'yes' : 'no' ?></span></td>
+              <td class="<?= $state === 'ok' ? 'ok' : 'bad' ?>"><?= e($where) ?></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+
+      <h2>6 · Error log</h2>
       <?php if (!$sections['logs']): ?>
         <p class="sub">No log file found. Set <code>'debug' =&gt; true</code> in <code>includes/config.php</code>,
         reload the failing page, and the error will be printed on screen instead.</p>
@@ -403,7 +468,8 @@ function render_diagnose(bool $isAdmin, array $sections, array $columns, array $
       <form method="get"><button type="submit">Run the check again</button></form>
       <p style="margin-top:14px"><a href="<?= e(url('')) ?>">← Back to the site</a> ·
          <a href="<?= e(url('install/migrate.php')) ?>">Run the migration</a> ·
-         <a href="<?= e(url('admin.php')) ?>">Back office</a></p>
+         <a href="<?= e(url('admin.php')) ?>">Back office</a> ·
+         <a href="<?= e(url('install/diagnose.php?full=1')) ?>">Open the page trap (why.php)</a></p>
     </div>
     </body></html><?php
 }
