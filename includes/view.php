@@ -80,26 +80,41 @@ final class View
             'takeRate'      => (float) Repo::setting('host_take_rate', 0.12),
         ];
 
-        /* The dispute centre and the live chat desk only exist once the
-           migration has run; ask for their data per page so the payload stays
-           small, and never break a page because the tables are not there yet. */
+        /* The dispute centre and the live chat desk are optional: they appear
+           once the migration has run, and their data is fetched per page so the
+           payload stays small.
+
+           The whole block is defensive on purpose. A support table that is
+           missing, a half-finished migration or a partially uploaded include
+           must never take a page down — least of all the back office — so
+           anything that goes wrong here is logged and the page simply renders
+           without the support blocks. install/diagnose.php reports the cause. */
         if (in_array($page, ['help', 'agent', 'admin'], true)) {
-            if (DB::tableExists('disputes')) {
-                require_once JL_INC . '/disputes.php';
-                $data['disputeCategories'] = DisputeService::categories();
-                $data['disputeWants']      = DisputeService::WANTS;
-                $data['disputeOutcomes']   = DisputeService::OUTCOMES;
-                $data['disputeStats']      = DisputeService::stats();
-                $data['disputes']          = $uid ? DisputeService::forUser($uid, 12) : [];
+            $support = [];
+            try {
+                if (DB::tableExists('disputes')) {
+                    require_once JL_INC . '/disputes.php';
+                    $support['disputeCategories'] = DisputeService::categories();
+                    $support['disputeWants']      = DisputeService::WANTS;
+                    $support['disputeOutcomes']   = DisputeService::OUTCOMES;
+                    $support['disputeStats']      = DisputeService::stats();
+                    $support['disputes']          = $uid ? DisputeService::forUser($uid, 12) : [];
+                }
+                if (DB::tableExists('chat_sessions')) {
+                    require_once JL_INC . '/livechat.php';
+                    $support['chat'] = [
+                        'settings'    => LiveChat::settings(),
+                        'departments' => LiveChat::departments(true),
+                    ];
+                    $support['chatAgent'] = $uid ? LiveChat::agentForUser($uid) : null;
+                }
+            } catch (Throwable $e) {
+                // Not fatal by design: log it, ship what we have, keep the page.
+                $support = [];
+                error_log('Jollof support payload (' . $page . '): ' . get_class($e) . ': ' . $e->getMessage()
+                    . ' in ' . $e->getFile() . ':' . $e->getLine());
             }
-            if (DB::tableExists('chat_sessions')) {
-                require_once JL_INC . '/livechat.php';
-                $data['chat'] = [
-                    'settings'    => LiveChat::settings(),
-                    'departments' => LiveChat::departments(true),
-                ];
-                $data['chatAgent'] = $uid ? LiveChat::agentForUser($uid) : null;
-            }
+            $data = array_merge($data, $support);
         }
 
         if (Auth::isAdmin()) {
