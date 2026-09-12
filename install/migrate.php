@@ -16,8 +16,16 @@ $root = dirname(__DIR__);
 $configFile = $root . '/includes/config.php';
 
 if (!is_file($configFile)) {
-    render_shell('Configuration missing',
-        '<p class="bad">Copy <code>includes/config.sample.php</code> to <code>includes/config.php</code> and fill in your cPanel MySQL details, then reload this page.</p>');
+    // No framework yet at this point, so the notice is rendered inline.
+    http_response_code(500);
+    ?><!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Configuration missing · Jollof Living</title></head>
+    <body style="font:15px/1.6 system-ui,sans-serif;padding:40px;max-width:640px;margin:auto">
+    <h1 style="font-size:22px">Configuration missing</h1>
+    <p>Copy <code>includes/config.sample.php</code> to <code>includes/config.php</code>,
+    fill in your cPanel MySQL details, then reload this page.</p>
+    </body></html><?php
     exit;
 }
 
