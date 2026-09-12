@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /admin.php
+Disallow: /admin-login.php
+Disallow: /api/
+Disallow: /install/
+Disallow: /account.php
+Disallow: /trips.php
+Disallow: /messages.php
+Disallow: /notifications.php
+Disallow: /payments.php
+Disallow: /confirm.php
+Disallow: /host-dashboard.php
+
+Sitemap: https://www.jollofliving.com/sitemap.xml
