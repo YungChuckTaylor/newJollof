@@ -140,8 +140,33 @@ final class BookingService
 
         $addons = array_values(array_filter((array) ($in['addons'] ?? []), 'is_string'));
         $promo  = strtoupper(trim((string) ($in['promo'] ?? '')));
-        $gift   = (int) ($in['gift'] ?? 0);
-        $q = Pricing::quote($p, $nights, $addons, $promo, $gift);
+
+        /* Gift-card credit is never a number the browser may type — the client
+           sends the CODE, and only the database says what the card is worth.
+           The applied amount is min(balance, what this stay actually costs). */
+        $giftCode = strtoupper(trim((string) ($in['giftCode'] ?? '')));
+        $gift     = 0;
+        $giftCard = null;
+        if ($giftCode !== '') {
+            if (!DB::tableExists('gift_cards')) {
+                return [false, 'Gift cards are not provisioned on this install yet.', null];
+            }
+            $giftCard = DB::row("SELECT * FROM gift_cards WHERE code = ? AND status = 'active'", [$giftCode]);
+            if (!$giftCard) {
+                return [false, 'That gift card code is not valid or is no longer active.', null];
+            }
+            if ((int) $giftCard['balance'] <= 0) {
+                return [false, 'That gift card has no balance left.', null];
+            }
+        }
+        $q = Pricing::quote($p, $nights, $addons, $promo);
+        if ($giftCard) {
+            $payable = max(0, (int) $q['total']);
+            if ($payable > 0) {
+                $gift = max(1, min((int) $giftCard['balance'], $payable));
+                $q = Pricing::quote($p, $nights, $addons, $promo, $gift);
+            }
+        }
 
         // Fall back to the signed-in member's own details. Note the checks are
         // for an EMPTY value, not just a missing key: the booking form omits
@@ -205,7 +230,7 @@ final class BookingService
                 'checkin_code'  => str_pad((string) random_int(1000, 9999), 4, '0', STR_PAD_LEFT) . '#',
                 'notes'         => (string) ($in['notes'] ?? '') ?: null,
                 // a frozen copy of the quote, so an invoice always shows what was charged
-                'breakdown'     => json_encode($q),
+                'breakdown'     => json_encode($giftCode !== '' && $gift > 0 ? $q + ['giftCode' => $giftCode] : $q),
             ]);
 
             DB::insert('booking_events', [
@@ -216,6 +241,23 @@ final class BookingService
 
             if ($q['promoCode']) {
                 DB::run('UPDATE promos SET uses = uses + 1 WHERE code = ?', [$q['promoCode']]);
+            }
+
+            /* Burn the gift-card credit for real, in the same transaction as
+               the reservation: the conditional UPDATE loses the race against a
+               second redemption of the same code, and this booking is rolled
+               back rather than double-spent. */
+            if ($gift > 0) {
+                $burn = DB::run(
+                    "UPDATE gift_cards
+                        SET balance = balance - ?,
+                            status  = CASE WHEN balance - ? <= 0 THEN 'redeemed' ELSE status END
+                      WHERE code = ? AND status = 'active' AND balance >= ?",
+                    [$gift, $gift, $giftCode, $gift]
+                );
+                if ($burn->rowCount() !== 1) {
+                    throw new RuntimeException('That gift card was used on another booking mid-checkout.');
+                }
             }
 
             DB::insert('payments', [
@@ -354,9 +396,13 @@ final class BookingService
             return [false, 'You cannot modify that reservation.'];
         }
 
+        /* The money machine, honestly: arrival flips the stay to active but
+           the host's payout waits for departure (escrow releases on CHECK-OUT
+           only); the old map released at check-in — guests could trigger it
+           and hosts could push it before anyone had slept there. */
         $map = [
-            'checkin'  => ['from' => ['confirmed'], 'to' => 'active',    'escrow' => 'released', 'msg' => 'Checked in — escrow released to the host.'],
-            'checkout' => ['from' => ['active'],    'to' => 'completed', 'escrow' => 'released', 'msg' => 'Check-out confirmed. Enjoy the rest of your day.'],
+            'checkin'  => ['from' => ['confirmed'], 'to' => 'active',    'escrow' => 'held',     'msg' => 'Checked in — enjoy the stay. The escrow stays held until check-out.'],
+            'checkout' => ['from' => ['active'],    'to' => 'completed', 'escrow' => 'released', 'msg' => 'Check-out confirmed — the escrow has been released to the host.'],
             'cancel'   => ['from' => ['pending', 'confirmed'], 'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Cancellation confirmed — refund on its way.'],
             'approve'  => ['from' => ['pending'],   'to' => 'confirmed', 'escrow' => 'held',     'msg' => 'Request approved.'],
             'decline'  => ['from' => ['pending'],   'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Request declined and refunded.'],
@@ -367,6 +413,18 @@ final class BookingService
         $step = $map[$action];
         if (!in_array((string) $b['status'], $step['from'], true)) {
             return [false, 'That action is not available for this reservation.'];
+        }
+        /* Time gate for the parties themselves (admin-console actions carry no
+           acting user and may still correct records by hand, with an audit
+           line): nobody checks in before the arrival day, nothing “checks
+           out” before the stay has run. */
+        if ($actingUserId !== null) {
+            if ($action === 'checkin' && (string) ($b['checkin'] ?? '') > date('Y-m-d')) {
+                return [false, 'Check-in opens on your arrival day (' . (string) $b['checkin'] . ').'];
+            }
+            if ($action === 'checkout' && (string) ($b['checkout'] ?? '') > date('Y-m-d')) {
+                return [false, 'Check-out is recorded on or after your departure day (' . (string) $b['checkout'] . ').'];
+            }
         }
 
         DB::update('bookings', [

@@ -21,6 +21,9 @@ if ($action === 'password') {
     if ($next !== $confirm)    json_fail('The two new passwords do not match.');
 
     DB::update('users', ['password_hash' => password_hash($next, PASSWORD_DEFAULT)], 'id = ?', [$uid]);
+    /* Every other browser and mobile token stops working immediately; this
+       session is kept (the member just changed their own password). */
+    Auth::revokeOtherSessions($uid);
     Repo::notify($uid, 'Password changed', 'Your password was updated. If this was not you, contact us immediately.', 'lock');
     audit((string) $user['email'], 'Password changed', 'ok');
 

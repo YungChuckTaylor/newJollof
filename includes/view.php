@@ -138,6 +138,9 @@ final class View
             'currency'=> active_currency(),
             'isAdmin' => Auth::isAdmin(),
             'admin2fa'=> (bool) config('security.admin_2fa_required'),
+            /* Capability ledger (R1 claims gate): the client may only render
+               promises about outside services whose flag is switched on. */
+            'flags'   => Repo::flagsForClient(),
             'user'    => $user ? [
                 'id'            => (int) $user['id'],
                 'name'          => $user['name'],

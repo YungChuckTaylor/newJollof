@@ -340,7 +340,9 @@ function liveChatEnd() {
     closeModal();
     const r = await cApi("chat.php", { action: "close", ref: CW.ref, token: CW.token, as: "visitor" });
     if (!r.ok) { cToast(r.message || "Could not end the chat.", "x"); return; }
-    if (r.data) CW.bundle = r.data;
+    /* The close response is minimal by design ({ref, status}) — merge it into
+       the bundle we already rendered instead of trusting it wholesale. */
+    if (r.data) CW.bundle = Object.assign({}, CW.bundle || {}, { status: "closed" });
     if (CW.tick) { clearInterval(CW.tick); CW.tick = null; }
     cwPaint((CW.bundle && CW.bundle.ratingOn && !CW.bundle.rating) ? "rate" : "chat");
   });
@@ -424,6 +426,11 @@ function acDenied(r) {
 function acPaint() {
   const body = cOne("#acBody");
   if (!body || !AC.data) return;
+  /* A half-typed reply survives every repaint (polls, tab switches, sends):
+     the draft lives per-chat in AC.drafts, captured before the DOM goes away. */
+  if (!AC.drafts) AC.drafts = {};
+  const curInp = cOne("#acInp");
+  if (curInp && AC.ref) AC.drafts[AC.ref] = curInp.value;
   const st = AC.data;
   const k = st.metrics || {};
   const kp = cOne("#acKpis");
@@ -455,6 +462,8 @@ function acPaint() {
     </div>
     <div id="acView">${acViewHTML()}</div>`;
   acWireView();
+  const fresh = cOne("#acInp");
+  if (fresh && AC.ref && AC.drafts[AC.ref]) fresh.value = AC.drafts[AC.ref];
 }
 
 function acTab(t) {
@@ -609,7 +618,7 @@ async function acSend(note) {
 async function acClaim() {
   const r = await cApi("chat.php", { action: "claim", ref: AC.ref });
   cToast(r.ok ? (r.message || "Chat claimed.") : (r.message || "Could not claim."), r.ok ? "check" : "x");
-  if (r.ok) { acRefresh(true); setTimeout(() => acOpen(AC.ref), 200); }
+  if (r.ok) { if (AC.drafts) AC.drafts[AC.ref] = ""; acRefresh(true); setTimeout(() => acOpen(AC.ref), 200); }
 }
 
 function acTransferBox() {
@@ -1119,7 +1128,9 @@ function dcCaseHTML() {
     const mine = (DC.role === "guest" && e.role === "guest") || (DC.role !== "guest" && e.role === "staff");
     const cls = e.visibility === "staff" ? "note" : (mine ? "me" : "bot");
     return head + `<div class="msg ${cls}">${cEsc(e.body).replace(/\n/g, "<br>")}
-      ${e.attachment ? `<div><a class="link-arrow" href="${cEsc(e.attachment)}" target="_blank" rel="noopener">${typeof I !== "undefined" && I.doc ? I.doc : ""} evidence</a></div>` : ""}
+      ${e.attachment ? (/^https?:\/\//i.test(e.attachment)
+        ? `<div><a class="link-arrow" href="${cEsc(e.attachment)}" target="_blank" rel="noopener">${typeof I !== "undefined" && I.doc ? I.doc : ""} evidence</a></div>`
+        : `<div class="small" style="opacity:.7">📎 ${cEsc(e.attachment)}</div>`) : ""}
       <span class="mtime">${cEsc(e.name || e.role)} · ${cEsc(e.label || "")}${e.visibility === "staff" ? " · internal" : ""}</span></div>`;
   }).join("");
   const canPost = c.canMessage !== false && (DC.staff || DC.role !== null);
@@ -1151,10 +1162,20 @@ function dcCaseHTML() {
     </div>`;
 }
 
+/* Mirror of DisputeService::TRANSITIONS for the buttons we offer — a mediator
+   never sees a move the server would refuse. Closed cases reopen to
+   “Under review” (D16/D18 semantics; there is no “re-resolve” button). */
+const DC_MOVES = {
+  submitted:    [["under_review", "Start review"], ["evidence", "Ask for evidence"], ["mediation", "Enter mediation"], ["escalated", "Escalate"]],
+  under_review: [["evidence", "Ask for evidence"], ["mediation", "Enter mediation"], ["escalated", "Escalate"]],
+  evidence:     [["under_review", "Back to review"], ["mediation", "Enter mediation"], ["escalated", "Escalate"]],
+  mediation:    [["evidence", "Ask for evidence"], ["escalated", "Escalate"]],
+  escalated:    [["mediation", "Back to mediation"]],
+};
 function dcStaffActions() {
   const c = DC.case || {};
-  const st = (AC.data && AC.data.settings) || {};
-  const statuses = [["under_review", "Under review"], ["evidence", "Evidence needed"], ["mediation", "In mediation"], ["escalated", "Escalate"], ["rejected", "Close · no action"], ["resolved", "Reopen (decision stands)"], ["withdrawn", "Reopen"]];
+  const open = ["submitted", "under_review", "evidence", "mediation", "escalated"].includes(c.status);
+  const closed = ["resolved", "rejected", "withdrawn"].includes(c.status);
   return `<div class="panel" style="margin-top:10px"><h4 style="font-size:16px">Mediation tools</h4>
     <div class="btnrow" style="flex-wrap:wrap">
       ${c.status === "submitted" ? `<button class="btn btn-gold btn-sm" onclick="dcStaff('/dispute.php',{action:'claim',ref:DC.case.ref},true)">Claim case</button>` : ""}
@@ -1162,13 +1183,21 @@ function dcStaffActions() {
         <option value="">Assign to…</option>
         ${((AC.cases && AC.cases.mediators) || []).map((m) => `<option value="${m.id}">${cEsc(m.name)}</option>`).join("")}
       </select>
-      ${statuses.filter(([s]) => s !== "resolved" || ["resolved", "rejected"].includes(c.status)).map(([s, l]) =>
-    `<button class="btn btn-ghost btn-sm" onclick="dcStaff('/dispute.php',{action:'status',ref:DC.case.ref,status:'${s}'},true)">${l}</button>`).join("")}
-      <button class="btn btn-gold btn-sm" onclick="dcResolveForm()">Record decision</button>
+      ${open ? ((DC_MOVES[c.status] || []).map(([s, l]) =>
+        `<button class="btn btn-ghost btn-sm" onclick="dcStaff('/dispute.php',{action:'status',ref:DC.case.ref,status:'${s}'},true)">${l}</button>`).join("") +
+        `<button class="btn btn-ghost btn-sm" onclick="dcCloseNoAction()">Close · no action</button>`) : ""}
+      ${closed ? `<button class="btn btn-ghost btn-sm" onclick="dcStaff('/dispute.php',{action:'status',ref:DC.case.ref,status:'under_review',note:'Reopened for a second look'},true)">Reopen — back to review</button>` : ""}
+      ${open ? `<button class="btn btn-gold btn-sm" onclick="dcResolveForm()">Record decision</button>` : ""}
     </div></div>`;
 }
 
-function dcResolveForm() {
+/* “No action” is a decision, not a status poke: it needs the note and it
+   records refund 0 through the resolve endpoint (server enforces both). */
+function dcCloseNoAction() {
+  dcResolveForm("no_action");
+}
+
+function dcResolveForm(preset) {
   const c = DC.case || {};
   const outcomes = (JL.data && JL.data.disputeOutcomes) || {
     full_refund: "Full refund", partial_refund: "Partial refund", rebooking: "Rebooking / credit",
@@ -1177,9 +1206,9 @@ function dcResolveForm() {
   };
   openModal(`<h3 style="font-size:21px;margin-bottom:8px">Decision on ${cEsc(c.ref)}</h3>
     <div class="frm-row"><label>Outcome</label><select class="sel" id="drOutcome">
-      ${Object.keys(outcomes).map((k) => `<option value="${k}">${cEsc(outcomes[k])}</option>`).join("")}
+      ${Object.keys(outcomes).map((k) => `<option value="${k}"${k === preset ? " selected" : ""}>${cEsc(outcomes[k])}</option>`).join("")}
     </select></div>
-    <div class="frm-row"><label>Refund amount (${cEsc(c.currency || "NGN")})</label><input class="inp" id="drRefund" type="number" min="0" step="1000" value="${c.amount || 0}"></div>
+    <div class="frm-row"><label>Refund amount (${cEsc(c.currency || "NGN")})</label><input class="inp" id="drRefund" type="number" min="0" step="1000" value="${preset === "no_action" ? 0 : (c.amount || 0)}"></div>
     <div class="frm-row"><label>Decision note (sent to both sides)</label><textarea class="txa" id="drNote" rows="4" placeholder="What you found and why this outcome is fair."></textarea></div>
     <div class="btnrow" style="margin-top:12px"><button class="btn btn-ghost" onclick="dcOpenCase(DC.case.ref, DC.token, true)">Back to the case</button>
       <button class="btn btn-gold" onclick="dcResolve()">Record decision</button></div>`);
@@ -1219,7 +1248,12 @@ async function dcSend(kind) {
   const txt = (inp && inp.value || "").trim();
   if (kind === "message" && !txt) { cToast("Write a message first.", "scale"); return; }
   if (kind === "evidence" && !txt) { cToast("Paste a link to the photo, receipt or file.", "scale"); return; }
-  const r = await cApi("dispute.php", { action: "post", ref: DC.case.ref, token: DC.token || undefined, body: txt, kind, attachment: kind === "evidence" ? txt : "" });
+  /* Evidence means a LINK: pull the first http(s) URL out of the note and
+     attach only that — the whole typed text stays in the body. Anything else
+     is refused server-side (D10). */
+  const urlMatch = txt.match(/https?:\/\/\S+/i);
+  if (kind === "evidence" && !urlMatch) { cToast("An evidence note needs a link — paste the URL to the photo, receipt or file.", "scale"); return; }
+  const r = await cApi("dispute.php", { action: "post", ref: DC.case.ref, token: DC.token || undefined, body: txt, kind, attachment: kind === "evidence" && urlMatch ? urlMatch[0] : "" });
   if (!r.ok) { cToast(r.message || "Could not add that to the case.", "x"); return; }
   if (inp) inp.value = "";
   DC.case = Object.assign(DC.case, r.data.case || {});

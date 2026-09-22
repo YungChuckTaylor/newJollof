@@ -64,8 +64,28 @@ $requireAgent = static function (bool $supervisor = false) use ($admin, $me): ar
     ];
 };
 
+/* The actor shape used for events AND for the canWorkSession checks inside
+   the service — so it must carry the queue map, not just a name. */
 $agentActor = static function (array $agent): array {
-    return ['id' => (int) $agent['id'], 'name' => (string) $agent['name'], 'role' => (string) ($agent['role'] ?? 'agent')];
+    return [
+        'id'    => (int) $agent['id'],
+        'name'  => (string) $agent['name'],
+        'role'  => (string) ($agent['role'] ?? 'agent'),
+        'queues'=> array_map('intval', (array) ($agent['queues'] ?? [])),
+        'coversAll' => !empty($agent['coversAll']),
+    ];
+};
+
+/** Load a session by ref or fail — shared by the agent-side endpoints. */
+$sessionForAgent = static function (array $agent, bool $admin, bool $mustWork = true) {
+    $s = LiveChat::session(input_str('ref'));
+    if (!$s) {
+        json_fail('That chat no longer exists.', 404);
+    }
+    if (!$admin && $mustWork && !LiveChat::canWorkSession($agent, $s)) {
+        json_fail('That chat is not yours to work.', 403);
+    }
+    return $s;
 };
 
 switch ($action) {
@@ -170,17 +190,16 @@ switch ($action) {
             'settings' => LiveChat::settings(),
             'departments' => LiveChat::departments(false),
             'agents'   => $admin ? LiveChat::agents(false) : [],
-            'canned'   => LiveChat::allCanned(),
+            'canned'   => $admin ? LiveChat::allCanned() : ($me ? LiveChat::canned((int) $me['id'], (int) ($me['departmentId'] ?? 0)) : []),
             'metrics'  => LiveChat::metrics(),
         ]);
     }
 
     case 'open': {
         $agent = $requireAgent();
-        $s = LiveChat::session(input_str('ref'));
-        if (!$s) {
-            json_fail('That chat no longer exists.', 404);
-        }
+        /* C17: an agent may only open chats from their own queues (or chats
+           nobody has taken); supervisors and admins see the whole desk. */
+        $s = $sessionForAgent($agent, $admin);
         $bundle = LiveChat::visitorBundle($s, '', 0, 'agent');
         json_ok([
             'session'  => LiveChat::shapeSession($s),
@@ -197,6 +216,12 @@ switch ($action) {
         $ref = input_str('ref');
         if ($as === 'agent') {
             $agent = $requireAgent();
+            /* Reading someone else's queue marks their messages read — only
+               agents who may work the chat get that access. */
+            $s0 = LiveChat::session($ref);
+            if ($s0 && !$admin && !LiveChat::canWorkSession($agent, $s0)) {
+                json_fail('That chat is not yours to read.', 403);
+            }
             [$ok, $message, $data] = LiveChat::poll($ref, '', input_int('after'), 'agent', (int) $agent['id']);
         } else {
             api_throttle('chat_poll', 240, 600);
@@ -238,7 +263,7 @@ switch ($action) {
             $agent = $requireAgent();
             [$ok, $message] = LiveChat::typing(input_str('ref'), 'agent', $agentActor($agent));
         } else {
-            [$ok, $message] = LiveChat::typing(input_str('ref'), 'visitor', ['token' => input_str('token')]);
+            [$ok, $message] = LiveChat::typing(input_str('ref'), 'visitor', [], input_str('token'));
         }
         if (!$ok) {
             json_fail($message);
@@ -250,15 +275,20 @@ switch ($action) {
         $as = input_str('as', 'agent');
         if ($as === 'agent') {
             $agent = $requireAgent();
-            [$ok, $message, $data] = LiveChat::close(input_str('ref'), 'agent', input_str('note'), $agentActor($agent));
+            $s = $sessionForAgent($agent, $admin, true);
+            [$ok, $message, $data] = LiveChat::close((string) $s['ref'], 'agent', input_str('note'), $agentActor($agent));
         } else {
-            [$ok, $message, $data] = LiveChat::close(input_str('ref'), 'visitor', input_str('note'), ['token' => input_str('token')]);
+            /* The visitor path authenticates inside close(): the caller must
+               hold the session token, refs alone prove nothing. */
+            api_throttle('chat_post', 60, 600);
+            [$ok, $message, $data] = LiveChat::close(input_str('ref'), 'visitor', input_str('note'), [], input_str('token'));
         }
         if (!$ok) {
             json_fail($message, is_int($data) ? $data : 400);
         }
-        $s = LiveChat::session(input_str('ref')) ?: [];
-        json_ok($s ? LiveChat::visitorBundle($s, input_str('token')) : [], $message);
+        /* Close answers minimally — no transcript re-dump (C21/C41): the
+           client keeps what it already rendered and just marks it ended. */
+        json_ok(['ref' => input_str('ref'), 'status' => 'closed'], $message);
     }
 
     case 'rate': {
@@ -311,8 +341,13 @@ switch ($action) {
         if (!$s) {
             json_fail('That chat no longer exists.', 404);
         }
+        /* Pick from the replies this agent is actually allowed to use —
+           global + their department + their own personal ones. */
+        $pool = $admin
+            ? LiveChat::allCanned()
+            : LiveChat::canned((int) ($agent['id'] ?? 0), (int) ($agent['departmentId'] ?? 0));
         $canned = null;
-        foreach (LiveChat::allCanned() as $c) {
+        foreach ($pool as $c) {
             if ((int) $c['id'] === input_int('id')) {
                 $canned = $c;
                 break;
@@ -332,8 +367,12 @@ switch ($action) {
     }
 
     case 'canned': {
-        $requireAgent();
-        json_ok(['canned' => LiveChat::allCanned()]);
+        $agent = $requireAgent();
+        /* Non-admins get the scoped list, not the whole desk's library. */
+        $list = $admin
+            ? LiveChat::allCanned()
+            : LiveChat::canned((int) ($agent['id'] ?? 0), (int) ($agent['departmentId'] ?? 0));
+        json_ok(['canned' => $list]);
     }
 
     case 'status': {
@@ -353,7 +392,7 @@ switch ($action) {
         json_ok([
             'metrics'  => LiveChat::metrics(),
             'agents'   => LiveChat::agents(false),
-            'disputes' => DB::tableExists('disputes') ? DisputeService::stats() : null,
+            'disputes' => DB::tableExists('disputes') ? DisputeService::stats(true) : null,
         ]);
     }
 

@@ -174,8 +174,12 @@ switch ($action) {
 
     case 'withdraw': {
         [$d, $role] = $authorize(input_str('ref'));
-        if ($role === 'staff') {
-            json_fail('Staff close a case with a decision rather than a withdrawal.');
+        /* Only the person who raised the case can take it back (D17) — the
+           respondent withdrawing a case against them is not a thing. */
+        if ($role !== 'guest') {
+            json_fail($role === 'staff'
+                ? 'Staff close a case with a decision rather than a withdrawal.'
+                : 'Only the person who raised this case can withdraw it.', 403);
         }
         $user = Auth::user();
         [$ok, $message, $data] = DisputeService::withdraw((string) $d['ref'], $actor($role, $user, (string) ($d['contact_name'] ?? 'Guest')), $d);
@@ -211,7 +215,7 @@ switch ($action) {
                 'priority' => input_str('priority'),
                 'assigned' => input_int('assigned'),
             ]),
-            'stats'     => DisputeService::stats(),
+            'stats'     => DisputeService::stats(true),
             'mediators' => DisputeService::mediators(),
         ]);
     }

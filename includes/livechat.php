@@ -402,15 +402,23 @@ final class LiveChat
             }
         }
 
-        /* Optionally create/refresh the sign-in account for a brand-new agent. */
+        /* Optionally create/refresh the sign-in account for a brand-new agent.
+           The password is validated BEFORE any write (no half-saved agents),
+           and it never touches site role, tier or KYC: chat-desk authority
+           comes from chat_agents.agent_role alone. The linked member account
+           is an ordinary verified account — an agent who is also an admin
+           gets that from their own user record, not from this form. */
         $password = (string) ($in['password'] ?? '');
+        if ($password !== '' && strlen($password) < 8) {
+            return [false, 'A temporary password needs at least 8 characters.', null];
+        }
         if ($password !== '') {
-            if (strlen($password) < 8) {
-                return [false, 'A temporary password needs at least 8 characters.', null];
-            }
-            $existingUser = (int) (DB::value('SELECT id FROM users WHERE email = ?', [$email], 0) ?: 0);
+            $existingUser = (int) ($linkedUser ?: (DB::value('SELECT id FROM users WHERE email = ?', [$email], 0) ?: 0));
             if ($existingUser) {
-                DB::update('users', ['role' => 'admin', 'password_hash' => password_hash($password, PASSWORD_DEFAULT)], 'id = ?', [$existingUser]);
+                DB::update('users', ['password_hash' => password_hash($password, PASSWORD_DEFAULT)], 'id = ?', [$existingUser]);
+                if (DB::columnExists('users', 'auth_version')) {
+                    DB::run('UPDATE users SET auth_version = auth_version + 1 WHERE id = ?', [$existingUser]);
+                }
                 DB::update('chat_agents', ['user_id' => $existingUser], 'id = ?', [$id]);
             } else {
                 $newUser = DB::insert('users', [
@@ -418,10 +426,8 @@ final class LiveChat
                     'email'         => $fields['email'],
                     'phone'         => $fields['phone'],
                     'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-                    'role'          => 'admin',
-                    'tier'          => 'platinum',
+                    'role'          => 'customer',
                     'status'        => 'Verified',
-                    'kyc_verified'  => 1,
                 ]);
                 DB::update('chat_agents', ['user_id' => $newUser], 'id = ?', [$id]);
             }
@@ -472,9 +478,25 @@ final class LiveChat
             'status'    => $active ? $agent['status'] : 'offline',
             'updated_at' => date('Y-m-d H:i:s'),
         ], 'id = ?', [$id]);
-        audit((string) ($actor['name'] ?? 'admin'), ($active ? 'Enabled' : 'Disabled') . ' chat agent ' . $agent['email'], 'info');
+        /* "Their chats return to the queue" now literally happens: every live
+           session goes back to queued (unassigned) instead of orbiting a
+           disabled agent forever. */
+        if (!$active) {
+            $orphans = DB::all("SELECT ref FROM chat_sessions WHERE agent_id = ? AND status = 'active'", [$id]);
+            foreach ($orphans as $row) {
+                self::assign((string) $row['ref'], null, ['id' => 0, 'name' => (string) ($actor['name'] ?? 'Desk admin')], 'agent disabled');
+            }
+            /* A disabled agent is not at their desk: their linked member
+               account's live sessions and mobile tokens end now, so an old
+               laptop tab cannot keep working the queue. */
+            $uid = (int) ($agent['userId'] ?? 0);
+            if ($uid) {
+                Auth::revokeSessions($uid);
+            }
+        }
+        audit((string) ($actor['name'] ?? 'admin'), ($active ? 'Enabled' : 'Disabled') . ' chat agent ' . $agent['email'] . ($active ? '' : ' — ' . count($orphans) . ' live chat(s) returned to the queue'), 'info');
         Repo::flush();
-        return [true, $active ? 'Agent enabled.' : 'Agent disabled — their chats return to the queue.', null];
+        return [true, $active ? 'Agent enabled.' : 'Agent disabled — ' . count($orphans) . ' live chat(s) returned to the queue.', null];
     }
 
     public static function deleteAgent(int $id, array $actor = []): array
@@ -753,6 +775,9 @@ final class LiveChat
                 return [false, 'Agent not recognised.', 403];
             }
             if (empty($s['agent_id'])) {
+                if (!self::canWorkSession($agent, $s)) {
+                    return [false, 'That chat is in another queue.', 403];
+                }
                 self::assign($ref, (int) $agent['id'], ['id' => (int) $agent['id'], 'name' => $agent['name']], 'took the chat');
                 $s = self::session($ref) ?: $s;
             } elseif ((int) $s['agent_id'] !== (int) $agent['id'] && $agent['role'] === 'agent') {
@@ -857,11 +882,23 @@ final class LiveChat
     }
 
     /** Typing indicator — an "at" timestamp that expires after a few seconds. */
-    public static function typing(string $ref, string $who, array $actor = []): array
+    public static function typing(string $ref, string $who, array $actor = [], string $token = ''): array
     {
         $s = self::session($ref);
         if (!$s) {
             return [false, 'Chat not found.', null];
+        }
+        if ((string) $s['status'] === 'closed') {
+            return [false, 'That chat has ended.', null];
+        }
+        /* Nobody waves at a conversation they are not in: an agent must be
+           allowed to work the session, a visitor must hold the token. */
+        if ($who === 'agent') {
+            if (empty($actor['id']) || !self::canWorkSession($actor, $s)) {
+                return [false, 'That chat is not yours to type in.', 403];
+            }
+        } elseif (!self::visitorOwns($s, $token, Auth::id())) {
+            return [false, 'That chat is not yours.', 403];
         }
         DB::update('chat_sessions', [$who === 'agent' ? 'agent_typing_at' : 'visitor_typing_at' => date('Y-m-d H:i:s')], 'id = ?', [(int) $s['id']]);
         return [true, '', null];
@@ -979,6 +1016,11 @@ final class LiveChat
         if (!$s) {
             return [false, 'Chat not found.', null];
         }
+        /* Plain agents work their own queues; supervisors and the desk admin
+           cover everything (C17). */
+        if (!self::canWorkSession($agent, $s)) {
+            return [false, 'That chat is not in one of your queues.', 403];
+        }
         if (!empty($s['agent_id']) && (int) $s['agent_id'] !== (int) $agent['id']) {
             return [false, 'That chat is already with ' . (self::agent((int) $s['agent_id'])['name'] ?? 'another agent') . '.', null];
         }
@@ -986,6 +1028,24 @@ final class LiveChat
             return [false, 'You are at your chat limit (' . $agent['max'] . '). Close one or raise your limit.', null];
         }
         return self::assign($ref, (int) $agent['id'], ['id' => (int) $agent['id'], 'name' => $agent['name']], 'claimed the chat');
+    }
+
+    /**
+     * May this agent work this session? Supervisors and desk admins always
+     * can; plain agents only chats inside a queue they cover, and never a
+     * chat that is already someone else's.
+     */
+    public static function canWorkSession(array $agent, array $s): bool
+    {
+        if (in_array((string) ($agent['role'] ?? 'agent'), ['supervisor', 'admin'], true)) {
+            return true;
+        }
+        $dept = (int) ($s['department_id'] ?? 0);
+        $inQueue = !empty($agent['coversAll']) || in_array($dept, $agent['queues'] ?? [], true);
+        if (!$inQueue) {
+            return false;
+        }
+        return empty($s['agent_id']) || (int) $s['agent_id'] === (int) ($agent['id'] ?? 0);
     }
 
     public static function transfer(string $ref, int $toAgentId, array $actor): array
@@ -1010,7 +1070,7 @@ final class LiveChat
         return [true, 'Chat transferred to ' . $to['name'] . '.', null];
     }
 
-    public static function close(string $ref, string $by, string $note = '', array $actor = []): array
+    public static function close(string $ref, string $by, string $note = '', array $actor = [], string $token = ''): array
     {
         $s = self::session($ref);
         if (!$s) {
@@ -1018,6 +1078,15 @@ final class LiveChat
         }
         if ((string) $s['status'] === 'closed') {
             return [false, 'That chat is already closed.', null];
+        }
+        /* A close "as the visitor" must actually be the visitor — the bearer
+           of the session token — not just anyone who knows the reference (C21/C41).
+           System closes (the auto-close sweep) carry no actor and no claim. */
+        if (empty($actor) && $by === 'visitor' && !self::visitorOwns($s, $token, Auth::id())) {
+            return [false, 'That chat is not yours.', 403];
+        }
+        if (!empty($actor) && !empty($actor['id']) && !self::canWorkSession($actor, $s)) {
+            return [false, 'That chat is not in one of your queues.', 403];
         }
         $now = date('Y-m-d H:i:s');
         DB::update('chat_sessions', [
@@ -1048,6 +1117,14 @@ final class LiveChat
         }
         if (!self::visitorOwns($s, $token, Auth::id())) {
             return [false, 'That chat is not yours.', 403];
+        }
+        /* Satisfaction is about the finished conversation: the rating opens
+           when the chat ends and can only be given once (C15). */
+        if ((string) $s['status'] !== 'closed') {
+            return [false, 'You can rate the chat once it has ended.', null];
+        }
+        if ($s['rating'] !== null) {
+            return [false, 'This chat has already been rated — thank you!', null];
         }
         if ($stars < 1 || $stars > 5) {
             return [false, 'Choose between one and five stars.', null];

@@ -24,7 +24,8 @@ if (!$user && !config('booking.allow_guest_checkout')) {
     'method'   => input_str('method', 'card'),
     'addons'   => (array) input('addons', []),
     'promo'    => input_str('promo'),
-    'gift'     => input_int('gift', 0),
+    /* the code, never an amount — BookingService reads the real balance (T-series) */
+    'giftCode' => strtoupper(trim(input_str('giftCode'))),
     'split'    => input_bool('split'),
     'request'  => input_bool('request'),
     'name'     => input_str('name'),

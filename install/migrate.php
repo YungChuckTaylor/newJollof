@@ -51,6 +51,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-0 hardening (WP01/WP03): the session-epoch column and the
+        // capability-flag table. These run through PHP on purpose — raw
+        // ALTER TABLE is not idempotent in either dialect, and this page
+        // must survive being pressed twice.
+        foreach (ensure_phase0_hardening() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -184,6 +192,83 @@ function seed_defaults(): array
     }
 
     return $notes;
+}
+
+/**
+ * Phase-0 hardening schema (WP01 + WP03).
+ *
+ *  • users.auth_version — the session epoch every login stamps and every
+ *    request re-checks, so suspension, agent pause and password changes kill
+ *    live sessions instantly instead of only hiding buttons;
+ *  • feature_flags — the capability ledger behind the claims gate: any UI
+ *    statement about an outside service (2FA, document vault, calendar sync,
+ *    keyless entry, live payments…) may only render while its flag is on.
+ *    Everything seeds OFF.
+ *
+ * Guarded statement by statement, safe to run on any number of occasions,
+ * on MySQL and on the SQLite development driver alike.
+ *
+ * @return string[] notes for the operator
+ */
+function ensure_phase0_hardening(): array
+{
+    $lines = [];
+    try {
+        if (!DB::tableExists('users')) {
+            $lines[] = 'users table missing — core schema first; auth_version skipped.';
+        } elseif (DB::columnExists('users', 'auth_version')) {
+            $lines[] = 'users.auth_version already in place.';
+        } else {
+            DB::run('ALTER TABLE users ADD COLUMN auth_version INT NOT NULL DEFAULT 0');
+            $lines[] = 'users.auth_version added — sessions now end when the account changes.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'users.auth_version could not be applied: ' . $e->getMessage();
+    }
+    try {
+        if (!DB::tableExists('feature_flags')) {
+            DB::run('CREATE TABLE IF NOT EXISTS feature_flags (
+                flag_key   VARCHAR(64) NOT NULL PRIMARY KEY,
+                enabled    TINYINT(1)  NOT NULL DEFAULT 0,
+                note       VARCHAR(255) NULL,
+                updated_at DATETIME NULL
+            )');
+            $lines[] = 'feature_flags created.';
+        }
+        $flags = [
+            ['account.2fa',         'Two-factor sign-in for member accounts — needs a working OTP channel (WP08).'],
+            ['account.documents',   'Document vault for host KYC uploads — needs storage + a review queue (WP08).'],
+            ['account.data_rights', 'Self-service NDPR export/erase — needs the erasure worker (WP08).'],
+            ['loyalty.redeem',      'Spending points against bookings — needs the rewards ledger (WP07).'],
+            ['channels.google_sync','Google Calendar availability sync — needs live OAuth credentials (WP15).'],
+            ['channels.airbnb_sync','OTA availability sync — needs partner API keys (WP15).'],
+            ['smartlock.sync',      'Keyless entry codes issued to locks — needs the lock integration (WP18).'],
+            ['payments.live_mode',  'Charging and payouts through a live gateway — needs webhook verification (WP04).'],
+        ];
+        $added = 0;
+        foreach ($flags as [$key, $note]) {
+            if (!DB::value('SELECT 1 FROM feature_flags WHERE flag_key = ?', [$key])) {
+                DB::insert('feature_flags', [
+                    'flag_key'   => $key,
+                    'enabled'    => 0,
+                    'note'       => $note,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+                $added++;
+            }
+        }
+        if ($added) {
+            $lines[] = 'feature_flags seeded: ' . $added . ' capability flag(s), all switched off — a feature may not advertise itself before its service is proven.';
+        } else {
+            $lines[] = 'feature_flags already seeded.';
+        }
+        if (class_exists('Repo')) {
+            Repo::flush();
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'feature_flags could not be prepared: ' . $e->getMessage();
+    }
+    return $lines;
 }
 
 /**

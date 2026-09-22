@@ -460,6 +460,13 @@ final class DisputeService
             return [false, 'Dispute not found.', null];
         }
         $body = trim($body);
+        /* Evidence links are exactly that — http(s). Anything else (a
+           javascript: URI, a data: blob) is dropped to "no attachment"
+           rather than stored to be rendered as a link later (D10). */
+        $attachment = trim($attachment);
+        if ($attachment !== '' && !preg_match('~^https?://~i', $attachment)) {
+            $attachment = '';
+        }
         if ($body === '' && $attachment === '') {
             return [false, 'Write a message or attach a link first.', null];
         }
@@ -502,12 +509,12 @@ final class DisputeService
         if ($role === 'guest') {
             self::notifyStaff($d, 'Guest replied on ' . $d['ref'], mb_substr($body, 0, 120));
             self::emailMediator($d, 'New message on dispute ' . $d['ref'], $body);
-        } else {
+        } elseif ($visibility !== 'staff') {
+            /* An internal note is silent for everyone but staff: no claimant
+               inbox entry, no email (D16). */
             self::notifyClaimant($d, $kind === 'evidence' ? 'Evidence added to ' . $d['ref'] : 'New message on ' . $d['ref'],
-                mb_substr($body, 0, 160), $visibility === 'staff' ? 'message' : 'scale');
-            if ($visibility === 'all') {
-                self::emailClaimant($d, 'Update on your dispute ' . $d['ref'], '<p>' . nl2br(e(mb_substr($body, 0, 1200))) . '</p>');
-            }
+                mb_substr($body, 0, 160), 'scale');
+            self::emailClaimant($d, 'Update on your dispute ' . $d['ref'], '<p>' . nl2br(e(mb_substr($body, 0, 1200))) . '</p>');
         }
 
         Repo::flush();
@@ -619,8 +626,20 @@ final class DisputeService
         if ($note === '') {
             return [false, 'Write the decision — it is sent to both sides.', null];
         }
+        /* A decision is for live cases; closed ones are reopened first (D18),
+           which keeps the audit trail honest about how many times money moved. */
+        if (!in_array((string) $d['status'], self::OPEN_STATUSES, true)) {
+            return [false, 'That case is not open — move it back to Under review first.', null];
+        }
         $refund = max(0, (int) ($in['refund'] ?? 0));
+        /* "No action" cannot quietly also be a payout (D34). */
+        if ($outcome === 'no_action') {
+            $refund = 0;
+        }
         $booking = $d['booking_id'] ? BookingService::find((string) $d['booking_ref']) : null;
+        if ($refund > 0 && !$booking) {
+            return [false, 'A refund needs a reservation attached to the case — there is nothing to refund without one (D31).', null];
+        }
         if ($refund > 0 && $booking && $refund > (int) $booking['total']) {
             return [false, 'The refund cannot exceed the reservation total of ' . money((int) $booking['total']) . '.', null];
         }
@@ -750,8 +769,15 @@ final class DisputeService
 
     /* ------------------------------------------------------------------ stats */
 
-    /** Live numbers for the help page and the back office. */
-    public static function stats(): array
+    /**
+     * Live numbers for the help page and the back office.
+     *
+     * $private=false (the default — the endpoint has no way to know who is
+     * asking) keeps the recent-case ticker to reference, status and age:
+     * no subjects, amounts, booking refs or names (D32). The staff queue
+     * view reads its cases via search(), which is gated separately.
+     */
+    public static function stats(bool $private = false): array
     {
         try {
             $open = (int) DB::value(
@@ -808,7 +834,15 @@ final class DisputeService
             'satisfaction' => round($satisfaction, 1),
             'overdue'      => $overdue,
             'byCategory'   => array_map(static fn($c) => ['name' => (string) $c['name'], 'n' => (int) $c['n']], $byCategory),
-            'recent'       => array_map(static fn($d) => self::summary($d, true), $recent),
+            'recent'       => $private
+                ? array_map(static fn($d) => self::summary($d, true), $recent)
+                : array_map(static fn($d) => [
+                    'ref'       => (string) $d['ref'],
+                    'status'    => (string) $d['status'],
+                    'label'     => self::STATUSES[(string) $d['status']][0] ?? ucfirst((string) $d['status']),
+                    'level'     => self::STATUSES[(string) $d['status']][1] ?? 'info',
+                    'openedAgo' => self::ago((string) $d['created_at']),
+                ], $recent),
             'ready'        => true,
         ];
     }

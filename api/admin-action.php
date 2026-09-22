@@ -46,18 +46,34 @@ switch ($entity) {
         if ((int) $u['id'] === (int) $admin['id']) json_fail('You cannot action your own account.');
 
         if ($action === 'verify') {
-            DB::update('users', ['status' => 'Verified', 'kyc_verified' => 1], 'id = ?', [$id]);
+            /* status and status_level move together — one account state, written
+               in one place (A72). */
+            DB::update('users', ['status' => 'Verified', 'status_level' => 'ok', 'kyc_verified' => 1], 'id = ?', [$id]);
             Repo::notify($id, 'Account verified ✨', 'Your identity check is complete. Instant booking is now enabled.', 'shield');
             audit($actor, 'Verified user ' . $u['email'], 'ok');
             json_ok([], 'User verified');
         }
         if ($action === 'suspend') {
-            DB::update('users', ['status' => 'Suspended'], 'id = ?', [$id]);
+            DB::update('users', ['status' => 'Suspended', 'status_level' => 'bad'], 'id = ?', [$id]);
+            /* Suspension is an ejection, not a coat of paint: every web session
+               and mobile token for the account dies right now (U19). */
+            Auth::revokeSessions($id);
+            /* And if this account also staffs live chat, the agent goes offline
+               with it — no ghost staff in the console. */
+            if (class_exists('LiveChat') && DB::tableExists('chat_agents')) {
+                $ag = DB::row('SELECT id FROM chat_agents WHERE user_id = ?', [$id]);
+                if ($ag) {
+                    LiveChat::toggleAgent((int) $ag['id'], false, ['name' => (string) $actor]);
+                }
+            }
+            $note = input_str('note', '');
+            Repo::notify($id, 'Account suspended', $note !== '' ? $note : 'Your account has been suspended. Contact support for details.', 'alert');
             audit($actor, 'Suspended user ' . $u['email'], 'bad');
-            json_ok([], 'User suspended — audit record written');
+            json_ok([], 'User suspended — sessions ended, audit record written');
         }
         if ($action === 'restore') {
-            DB::update('users', ['status' => 'Verified'], 'id = ?', [$id]);
+            DB::update('users', ['status' => 'Verified', 'status_level' => 'ok'], 'id = ?', [$id]);
+            Repo::notify($id, 'Account restored', 'Welcome back — your account is active again.', 'check');
             audit($actor, 'Restored user ' . $u['email'], 'warn');
             json_ok([], 'User restored');
         }
