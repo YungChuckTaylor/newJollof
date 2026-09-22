@@ -59,6 +59,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-1 money machine (WP04-WP07): payment_intents, ledger, installment_plans, outbox
+        foreach (ensure_phase1_money_machine() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -277,6 +282,246 @@ function ensure_phase0_hardening(): array
  *
  * @return string[] notes for the operator
  */
+
+/**
+ * Phase-1 money machine schema (WP04-WP07).
+ *
+ *  • payment_intents — asynchronous, idempotent gateway charge tracker;
+ *  • ledger_accounts / ledger_entries — immutable double-entry bookkeeping;
+ *  • installment_plans — multi-tranche split payment tracking;
+ *  • outbox_events — durable asynchronous event bus for retries and webhooks.
+ *
+ * @return string[]
+ */
+function ensure_phase1_money_machine(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('payment_intents')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS payment_intents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    booking_id INTEGER NULL,
+                    user_id INTEGER NULL,
+                    kind VARCHAR(32) NOT NULL DEFAULT "booking",
+                    amount_fen INTEGER NOT NULL,
+                    currency CHAR(3) NOT NULL DEFAULT "NGN",
+                    provider VARCHAR(32) NOT NULL DEFAULT "sandbox",
+                    provider_ref VARCHAR(191) NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "initiated",
+                    idempotency_key CHAR(64) NOT NULL UNIQUE,
+                    payload_hash CHAR(64) NULL,
+                    metadata TEXT NULL,
+                    verified_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS payment_intents (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    booking_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    user_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    kind VARCHAR(32) NOT NULL DEFAULT "booking",
+                    amount_fen BIGINT(20) NOT NULL,
+                    currency CHAR(3) NOT NULL DEFAULT "NGN",
+                    provider VARCHAR(32) NOT NULL DEFAULT "sandbox",
+                    provider_ref VARCHAR(191) DEFAULT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "initiated",
+                    idempotency_key CHAR(64) NOT NULL,
+                    payload_hash CHAR(64) DEFAULT NULL,
+                    metadata TEXT DEFAULT NULL,
+                    verified_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_intent_idem (idempotency_key),
+                    KEY ix_intent_booking (booking_id),
+                    KEY ix_intent_user (user_id),
+                    KEY ix_intent_provref (provider, provider_ref),
+                    KEY ix_intent_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'payment_intents created (WP04).';
+        } else {
+            $lines[] = 'payment_intents already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'payment_intents setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('ledger_accounts')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS ledger_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key_name VARCHAR(64) NOT NULL UNIQUE,
+                    name VARCHAR(128) NOT NULL,
+                    currency CHAR(3) NOT NULL DEFAULT "NGN",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS ledger_accounts (
+                    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    key_name VARCHAR(64) NOT NULL,
+                    name VARCHAR(128) NOT NULL,
+                    currency CHAR(3) NOT NULL DEFAULT "NGN",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_ledger_acct_key (key_name)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'ledger_accounts created (WP05).';
+        }
+
+        // Seed core ledger accounts
+        $accts = [
+            ['guest_cash',       'Guest Cash Inflow'],
+            ['escrow',           'Guest Escrow Liability'],
+            ['host_earnings',    'Host Payable'],
+            ['platform_fee',     'Platform Revenue'],
+            ['gift_liability',   'Gift Card Liability'],
+            ['loyalty_redeemed', 'Loyalty Liability'],
+            ['refund_out',       'Refund Disbursed Clearing'],
+        ];
+        $seededAccts = 0;
+        foreach ($accts as [$k, $n]) {
+            if (!DB::value('SELECT 1 FROM ledger_accounts WHERE key_name = ?', [$k])) {
+                DB::insert('ledger_accounts', ['key_name' => $k, 'name' => $n, 'currency' => 'NGN']);
+                $seededAccts++;
+            }
+        }
+        if ($seededAccts > 0) {
+            $lines[] = 'Seeded ' . $seededAccts . ' standard chart of accounts into ledger_accounts.';
+        }
+
+        if (!DB::tableExists('ledger_entries')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS ledger_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_key VARCHAR(64) NOT NULL,
+                    booking_id INTEGER NULL,
+                    user_id INTEGER NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    amount_fen INTEGER NOT NULL,
+                    ref_type VARCHAR(32) NOT NULL,
+                    ref_id VARCHAR(64) NOT NULL,
+                    idempotency_key CHAR(64) NOT NULL UNIQUE,
+                    reverses_entry_id INTEGER NULL,
+                    narration VARCHAR(255) NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS ledger_entries (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    account_key VARCHAR(64) NOT NULL,
+                    booking_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    user_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    direction VARCHAR(10) NOT NULL,
+                    amount_fen BIGINT(20) NOT NULL,
+                    ref_type VARCHAR(32) NOT NULL,
+                    ref_id VARCHAR(64) NOT NULL,
+                    idempotency_key CHAR(64) NOT NULL,
+                    reverses_entry_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    narration VARCHAR(255) DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_ledger_idem (idempotency_key),
+                    KEY ix_ledger_acct (account_key),
+                    KEY ix_ledger_booking (booking_id),
+                    KEY ix_ledger_user (user_id),
+                    KEY ix_ledger_ref (ref_type, ref_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'ledger_entries created (WP05 double-entry escrow ledger).';
+        } else {
+            $lines[] = 'ledger_entries already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'ledger setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('installment_plans')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS installment_plans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    booking_id INTEGER NOT NULL,
+                    tranche_index INTEGER NOT NULL DEFAULT 1,
+                    total_tranches INTEGER NOT NULL DEFAULT 2,
+                    due_date DATE NOT NULL,
+                    amount_fen INTEGER NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "pending",
+                    payment_intent_id INTEGER NULL,
+                    paid_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS installment_plans (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    booking_id BIGINT(20) UNSIGNED NOT NULL,
+                    tranche_index INT(11) NOT NULL DEFAULT 1,
+                    total_tranches INT(11) NOT NULL DEFAULT 2,
+                    due_date DATE NOT NULL,
+                    amount_fen BIGINT(20) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "pending",
+                    payment_intent_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    paid_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_inst_booking_tranche (booking_id, tranche_index),
+                    KEY ix_inst_booking (booking_id),
+                    KEY ix_inst_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'installment_plans created (WP06).';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'installment_plans setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('outbox_events')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS outbox_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type VARCHAR(64) NOT NULL,
+                    payload TEXT NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT "pending",
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    run_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    lease_until DATETIME NULL,
+                    dedupe_key VARCHAR(128) NOT NULL UNIQUE,
+                    last_error TEXT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS outbox_events (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    event_type VARCHAR(64) NOT NULL,
+                    payload TEXT NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT "pending",
+                    attempts INT(11) NOT NULL DEFAULT 0,
+                    run_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    lease_until DATETIME DEFAULT NULL,
+                    dedupe_key VARCHAR(128) NOT NULL,
+                    last_error TEXT DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_outbox_dedupe (dedupe_key),
+                    KEY ix_outbox_status_run (status, run_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'outbox_events created (WP04/WP05 asynchronous bus).';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'outbox_events setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
 function ensure_seed_keys(): array
 {
     $notes = [];

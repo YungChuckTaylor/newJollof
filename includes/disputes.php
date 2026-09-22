@@ -663,6 +663,13 @@ final class DisputeService
         if ($booking) {
             $full = $refund > 0 && $refund >= (int) $booking['total'];
             if ($refund > 0) {
+                // Post balanced double-entry ledger refund from escrow to refund_out
+                $refundFen = $refund * 100;
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_ESCROW,     'direction' => 'debit',  'amount_fen' => $refundFen],
+                    ['account' => Ledger::ACCT_REFUND_OUT, 'direction' => 'credit', 'amount_fen' => $refundFen],
+                ], 'dispute_refund', 'REF-' . $d['ref'], (int) $booking['id'], (int) ($booking['user_id'] ?? 0), 'Dispute resolution refund (' . self::OUTCOMES[$outcome] . ')');
+
                 // A real refund row against the reservation, not just a note.
                 DB::insert('payments', [
                     'booking_id' => (int) $booking['id'],
@@ -680,6 +687,7 @@ final class DisputeService
                 ]);
                 DB::update('bookings', [
                     'escrow_status' => $full ? 'refunded' : 'held',
+                    'status'        => $full ? 'cancelled' : $booking['status'],
                     'updated_at'    => $now,
                 ], 'id = ?', [(int) $booking['id']]);
                 if ($full) {

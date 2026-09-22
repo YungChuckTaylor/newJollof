@@ -1449,11 +1449,11 @@ function bkAddons(){
           <h3 style="font-size:18px">Extended stay agreement</h3>
           <p class="muted" style="font-size:13.5px">For 30+ nights we prepare a written extended-stay agreement by email before you sign — the document vault is not part of this install.</p>
         </div>
-        <div class="panel">
+        ${nightsBetween(BOOK_STATE.in,BOOK_STATE.out)>=30?`<div class="panel">
           <h3 style="font-size:18px">Split payments</h3>
           <label class="chk" style="margin-top:6px"><input type="checkbox" id="bkSplit" ${BOOK_STATE.split?"checked":""}> Pay 50% now, 50% at check-in (30+ nights)</label>
           <div class="small" style="margin-top:6px">Eases the financial burden of long-term luxury living.</div>
-        </div>
+        </div>`:""}
       </div>
     </div>
     <div class="wizard-foot">
@@ -1569,7 +1569,7 @@ function bindBooking(id,q){
     const next1=e.target.closest("#bkNext1"); if(next1){ BOOK_STATE.policy=$("#bkPol")?.value||BOOK_STATE.policy; bkStep(1); return; }
     const next2=e.target.closest("#bkNext2"); if(next2){ const pol=$("#bkPol"); if(pol) BOOK_STATE.policy=pol.value;
       $$("[data-addon]").forEach(c=>{ const k=c.dataset.addon; const has=c.checked; if(has&&!BOOK_STATE.addons.includes(k)) BOOK_STATE.addons.push(k); if(!has) BOOK_STATE.addons=BOOK_STATE.addons.filter(x=>x!==k); });
-      const sp=$("#bkSplit"); if(sp) BOOK_STATE.split=sp.checked;
+      const sp=$("#bkSplit"); if(sp) BOOK_STATE.split=sp.checked && nightsBetween(BOOK_STATE.in,BOOK_STATE.out)>=30;
       bkStep(2); return; }
     const next3=e.target.closest("#bkNext3"); if(next3){ bkStep(3); return; }
     const conf=e.target.closest("#bkConfirm"); if(conf){
@@ -3315,11 +3315,9 @@ function payInvoices(){
   return `<div class="panel"><h3 style="font-size:18px">Transactions</h3>
     <div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Invoice</th><th>Description</th><th>Amount</th><th>Status</th><th></th></tr></thead>
     <tbody>
-      ${S.bookings.slice(0,4).map((b,i)=>`<tr><td class="strong">JL-2026-${9000+i}</td><td>${esc(b.name)} · ${b.in} → ${b.out}</td><td>${fmt(b.total)}</td>
-      <td><span class="pill-status ${b.status==="confirmed"?"ok":"info"}">${b.status==="confirmed"?"Paid · escrow":"Pending"}</span></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="openInvoice('${b.ref}')">${I.doc} PDF</button></td></tr>`).join("")}
-      <tr><td class="strong">JL-2026-8311</td><td>Lagos Lagoon Cruise · 2 guests</td><td>₦170,000</td><td><span class="pill-status ok">Paid</span></td><td><button class="btn btn-ghost btn-sm" onclick="toast('Receipt downloaded','download')">${I.doc} PDF</button></td></tr>
-      <tr><td class="strong">JL-2026-8304</td><td>Gift card purchase · ₦100,000</td><td>₦100,000</td><td><span class="pill-status ok">Paid</span></td><td><button class="btn btn-ghost btn-sm" onclick="toast('Receipt downloaded','download')">${I.doc} PDF</button></td></tr>
+      ${S.bookings.length?S.bookings.map((b)=>`<tr><td class="strong">${esc(b.ref)}</td><td>${esc(b.name)} · ${b.in} → ${b.out}</td><td>${fmt(b.total)}</td>
+      <td><span class="pill-status ${b.status==="confirmed"?"ok":"info"}">${b.status==="confirmed"?"Paid · escrow":esc(b.status)}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openInvoice('${b.ref}')">${I.doc} PDF</button></td></tr>`).join(""):`<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--muted)">No transaction receipts found for your account.</td></tr>`}
     </tbody></table></div>
     <div class="small" style="margin-top:10px">Corporate billing supported — add a PO number to any invoice in your account settings.</div>
   </div>`;

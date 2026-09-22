@@ -183,6 +183,12 @@ final class BookingService
             return [false, 'Please provide your name and a valid email address.', null];
         }
 
+        // Phase 1 (WP06): Split payment eligibility check (minimum 30 nights)
+        $splitRequested = !empty($in['split']);
+        if ($splitRequested && $nights < 30) {
+            return [false, 'Split payment (50% now, 50% at check-in) is only eligible on extended stays of 30 nights or more (WP06).', null];
+        }
+
         $isRequest = !empty($in['request']) || !$p['instant'];
         $tier = $user['tier'] ?? 'bronze';
         $points = Pricing::points($q['total'], (string) $tier);
@@ -260,16 +266,39 @@ final class BookingService
                 }
             }
 
+            $chargeAmount = !empty($in['split']) ? $q['halfNow'] : $q['total'];
             DB::insert('payments', [
                 'booking_id' => $id,
                 'user_id'    => $user['id'] ?? null,
                 'reference'  => $ref . '-P1',
                 'gateway'    => (string) config('payments.mode', 'record_only'),
-                'amount'     => !empty($in['split']) ? $q['halfNow'] : $q['total'],
+                'amount'     => $chargeAmount,
                 'currency'   => 'NGN',
                 'status'     => 'initiated',
                 'payload'    => json_encode(['method' => $method, 'split' => !empty($in['split'])]),
             ]);
+
+            // Phase 1 (WP04/WP05): Create PaymentIntent and post initial ledger holds
+            $intentKey = hash('sha256', "booking:$ref:$id:$chargeAmount");
+            $intent = PaymentService::createIntent($id, $chargeAmount * 100, 'booking', (int) ($user['id'] ?? 0), $intentKey, [
+                'booking_ref' => $ref,
+                'email'       => $email,
+                'name'        => $name,
+                'split'       => !empty($in['split']),
+            ]);
+
+            // If gift card credit was applied, post the gift liability transfer to escrow right now
+            if ($gift > 0) {
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_GIFT_LIABILITY, 'direction' => 'debit',  'amount_fen' => $gift * 100],
+                    ['account' => Ledger::ACCT_ESCROW,         'direction' => 'credit', 'amount_fen' => $gift * 100],
+                ], 'gift_redemption', (string) $giftCode, $id, (int) ($user['id'] ?? 0), 'Gift card credit applied to reservation');
+            }
+
+            // In demo/sandbox or record_only mode, auto-capture intent into escrow
+            if (config('payments.mode', 'record_only') === 'record_only' || config('payments.mode') === 'sandbox') {
+                PaymentService::captureIntent((int) $intent['id'], ['source' => 'record_only_checkout']);
+            }
 
             if ($user) {
                 DB::run('UPDATE users SET points = points + ? WHERE id = ?', [$points, (int) $user['id']]);
@@ -441,8 +470,41 @@ final class BookingService
 
         if ($action === 'cancel' || $action === 'decline') {
             DB::run("UPDATE payments SET status = 'refunded' WHERE booking_id = ?", [(int) $b['id']]);
+            $calc = Cancellations::compute($b);
+            $refundFen = $calc['refund_fen'];
+            if ($refundFen > 0) {
+                // Post ledger reversal from escrow to refund_out
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_ESCROW,     'direction' => 'debit',  'amount_fen' => $refundFen],
+                    ['account' => Ledger::ACCT_REFUND_OUT, 'direction' => 'credit', 'amount_fen' => $refundFen],
+                ], 'refund', 'CNL-' . $b['ref'], (int) $b['id'], (int) ($b['user_id'] ?? 0), 'Cancellation refund under ' . $calc['policy'] . ' policy (' . ($calc['pct'] * 100) . '%)');
+            }
             if ($b['user_id']) {
-                DB::run('UPDATE users SET points = GREATEST(0, points - ?) WHERE id = ?', [(int) $b['points_earned'], (int) $b['user_id']]);
+                $ptsRev = $calc['points_to_reverse'];
+                if ($ptsRev > 0) {
+                    DB::run('UPDATE users SET points = GREATEST(0, points - ?) WHERE id = ?', [$ptsRev, (int) $b['user_id']]);
+                    DB::insert('points_ledger', [
+                        'user_id'     => (int) $b['user_id'],
+                        'date_label'  => date('M j, Y'),
+                        'description' => 'Cancellation reversal · ' . ($b['property_name'] ?? $b['ref']),
+                        'amount'      => -$ptsRev,
+                        'kind'        => 'redeem',
+                    ]);
+                }
+            }
+        }
+        if ($action === 'checkout') {
+            // Release escrow to host earnings and platform commission
+            $heldFen = Ledger::bookingEscrowBalance((int) $b['id']);
+            if ($heldFen > 0) {
+                $takeRate = (float) Repo::setting('host_take_rate', 0.12);
+                $feeFen = (int) round($heldFen * $takeRate);
+                $hostFen = max(0, $heldFen - $feeFen);
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_ESCROW,        'direction' => 'debit',  'amount_fen' => $heldFen],
+                    ['account' => Ledger::ACCT_HOST_EARNINGS, 'direction' => 'credit', 'amount_fen' => $hostFen],
+                    ['account' => Ledger::ACCT_PLATFORM_FEE,   'direction' => 'credit', 'amount_fen' => $feeFen],
+                ], 'checkout_release', 'REL-' . $b['ref'], (int) $b['id'], (int) ($b['user_id'] ?? 0), 'Escrow settled on verified checkout');
             }
         }
         if ($action === 'checkin') {
