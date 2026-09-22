@@ -1662,7 +1662,7 @@ function pConfirm(ref){
       <a class="btn btn-ghost" onclick="gcalStay('${b.prop}')">${I.calendar} Add to calendar</a>
       <button class="btn btn-ghost" onclick="openInvoice('${b.ref}')">${I.doc} Invoice PDF</button>
     </div>
-    <p class="small" style="text-align:center;margin-top:18px">${I.shield} Funds are held by Jollof Living and released to the host after you confirm check-in.</p>
+    <p class="small" style="text-align:center;margin-top:18px">${I.shield} Funds are held in escrow by Jollof Living and released to the host upon check-out.</p>
   </div></div>`;
 }
 function openInvoice(ref){
@@ -1787,7 +1787,7 @@ async function tripCheckin(ref){
   const r=await tripAction(ref,"checkin"); if(!r) return;
   render(); renderBadges();
   openModal(`<div style="text-align:center;padding:12px 0"><div class="why-ico" style="margin:0 auto 16px;width:60px;height:60px;border-radius:18px">${I.key}</div>
-    <h2>You're checked in 🎉</h2><p class="muted" style="margin:8px 0 2px">Welcome to ${esc(b?b.name:"your residence")}. The host has been notified and the escrow payment is now released.</p>
+    <h2>You're checked in 🎉</h2><p class="muted" style="margin:8px 0 2px">Welcome to ${esc(b?b.name:"your residence")}. The host has been notified and your funds remain securely protected in escrow until check-out.</p>
     <div class="small" style="margin-bottom:16px">If anything isn't right, report it from your stay dashboard within 24h.</div>
     <div class="btnrow" style="justify-content:center"><button class="btn btn-green" onclick="closeModal()">Enjoy your stay</button><button class="btn btn-ghost" data-goto="/messages">Message host</button></div></div>`);
 }

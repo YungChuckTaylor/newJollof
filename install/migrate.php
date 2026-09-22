@@ -64,6 +64,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-2 booking integrity (WP08-WP11): night_holds, booking_changes
+        foreach (ensure_phase2_booking_integrity() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -516,6 +521,97 @@ function ensure_phase1_money_machine(): array
         }
     } catch (Throwable $e) {
         $lines[] = 'outbox_events setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
+
+/**
+ * Phase-2 booking integrity schema (WP08-WP11).
+ *
+ *  • night_holds — hard unique concurrency lock on (property_id, stay_date, active);
+ *  • booking_changes — formal modification workflow with delta quotes.
+ *
+ * @return string[]
+ */
+function ensure_phase2_booking_integrity(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('night_holds')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS night_holds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    property_id INTEGER NOT NULL,
+                    stay_date DATE NOT NULL,
+                    booking_id INTEGER NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT "active",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (property_id, stay_date, status)
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS night_holds (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    property_id INT(10) UNSIGNED NOT NULL,
+                    stay_date DATE NOT NULL,
+                    booking_id BIGINT(20) UNSIGNED DEFAULT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT "active",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_night_prop_date (property_id, stay_date, status),
+                    KEY ix_night_booking (booking_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'night_holds created (WP09 hard concurrency locks).';
+        } else {
+            $lines[] = 'night_holds already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'night_holds setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('booking_changes')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS booking_changes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    booking_id INTEGER NOT NULL,
+                    proposed_checkin DATE NOT NULL,
+                    proposed_checkout DATE NOT NULL,
+                    proposed_guests INTEGER NOT NULL,
+                    delta_quote TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "pending_host",
+                    note TEXT NULL,
+                    expires_at DATETIME NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS booking_changes (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    booking_id BIGINT(20) UNSIGNED NOT NULL,
+                    proposed_checkin DATE NOT NULL,
+                    proposed_checkout DATE NOT NULL,
+                    proposed_guests INT(11) NOT NULL,
+                    delta_quote TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "pending_host",
+                    note TEXT DEFAULT NULL,
+                    expires_at DATETIME NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_change_booking (booking_id),
+                    KEY ix_change_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'booking_changes created (WP10 modification workflow).';
+        } else {
+            $lines[] = 'booking_changes already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'booking_changes setup error: ' . $e->getMessage();
     }
 
     return $lines;

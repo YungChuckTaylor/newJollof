@@ -25,12 +25,28 @@ final class Pricing
      * @param string $promo   promo code
      * @param int    $gift    gift-card credit in NGN
      */
-    public static function quote(array $p, int $nights, array $addons = [], string $promo = '', int $gift = 0): array
+    public static function quote(array $p, int $nights, array $addons = [], string $promo = '', int $gift = 0, ?string $checkin = null, ?string $checkout = null): array
     {
         $R = Repo::rates();
         $nights = max(1, $nights);
+        $pid = (int) ($p['pid'] ?? $p['id'] ?? 0);
         $nightly = (int) $p['price'];
-        $base = $nightly * $nights;
+
+        // Phase 2 (WP08): Calculate exact base amount accounting for daily calendar overrides
+        $base = 0;
+        if ($checkin !== null && $checkout !== null && $pid > 0 && DB::tableExists('property_calendar')) {
+            $cur = strtotime($checkin);
+            $out = strtotime($checkout);
+            $overrides = DB::pairs('SELECT day, price FROM property_calendar WHERE property_id = ? AND day >= ? AND day < ?', [$pid, $checkin, $checkout]);
+            while ($cur < $out) {
+                $dayIso = date('Y-m-d', $cur);
+                $dayPrice = isset($overrides[$dayIso]) && $overrides[$dayIso] !== null ? (int) $overrides[$dayIso] : $nightly;
+                $base += $dayPrice;
+                $cur = strtotime('+1 day', $cur);
+            }
+        } else {
+            $base = $nightly * $nights;
+        }
 
         $discRate = $nights >= 30 ? (float) $R['monthlyDisc'] : ($nights >= 7 ? (float) $R['weeklyDisc'] : 0.0);
         $lengthDiscount = (int) round($base * $discRate);
@@ -119,6 +135,12 @@ final class BookingService
             return [false, 'That residence is no longer available.', null];
         }
 
+        // Phase 2 (WP09): Reject bookings on paused/draft/pending listings
+        $pStatus = strtolower((string) ($p['status'] ?? 'active'));
+        if (in_array($pStatus, ['paused', 'pending', 'draft', 'disabled'], true)) {
+            return [false, 'This residence is currently not accepting reservations (WP09).', null];
+        }
+
         $checkin = self::date($in['checkin'] ?? '');
         $checkout = self::date($in['checkout'] ?? '');
         if (!$checkin || !$checkout) {
@@ -132,7 +154,12 @@ final class BookingService
         }
 
         $nights = nights_between($checkin, $checkout);
-        $guests = max(1, min((int) ($in['guests'] ?? 1), (int) $p['guests']));
+        $requestedGuests = (int) ($in['guests'] ?? 1);
+        $maxGuests = (int) ($p['guests'] ?? 2);
+        if ($requestedGuests > $maxGuests) {
+            return [false, "This residence accommodates up to {$maxGuests} guests (WP09).", null];
+        }
+        $guests = max(1, $requestedGuests);
 
         if (!self::isAvailable((int) $p['pid'], $checkin, $checkout)) {
             return [false, 'Those dates have just been taken. Please choose another window.', null];
@@ -159,12 +186,12 @@ final class BookingService
                 return [false, 'That gift card has no balance left.', null];
             }
         }
-        $q = Pricing::quote($p, $nights, $addons, $promo);
+        $q = Pricing::quote($p, $nights, $addons, $promo, 0, $checkin, $checkout);
         if ($giftCard) {
             $payable = max(0, (int) $q['total']);
             if ($payable > 0) {
                 $gift = max(1, min((int) $giftCard['balance'], $payable));
-                $q = Pricing::quote($p, $nights, $addons, $promo, $gift);
+                $q = Pricing::quote($p, $nights, $addons, $promo, $gift, $checkin, $checkout);
             }
         }
 
@@ -238,6 +265,22 @@ final class BookingService
                 // a frozen copy of the quote, so an invoice always shows what was charged
                 'breakdown'     => json_encode($giftCode !== '' && $gift > 0 ? $q + ['giftCode' => $giftCode] : $q),
             ]);
+
+            // Phase 2 (WP09): Hard atomic night holds against concurrency double-booking
+            if (DB::tableExists('night_holds')) {
+                $holdCur = strtotime($checkin);
+                $holdOut = strtotime($checkout);
+                while ($holdCur < $holdOut) {
+                    DB::insert('night_holds', [
+                        'property_id' => (int) $p['pid'],
+                        'stay_date'   => date('Y-m-d', $holdCur),
+                        'booking_id'  => $id,
+                        'status'      => 'active',
+                        'created_at'  => date('Y-m-d H:i:s'),
+                    ]);
+                    $holdCur = strtotime('+1 day', $holdCur);
+                }
+            }
 
             DB::insert('booking_events', [
                 'booking_id' => $id,
@@ -421,8 +464,17 @@ final class BookingService
         if (!$b) {
             return [false, 'Reservation not found.'];
         }
-        if ($actingUserId !== null && (int) $b['user_id'] !== $actingUserId && !Auth::isAdmin()) {
-            return [false, 'You cannot modify that reservation.'];
+        // Phase 2 (WP10/WP11): Role permissions on transition
+        if ($actingUserId !== null && !Auth::isAdmin()) {
+            $isGuest = (int) $b['user_id'] === $actingUserId;
+            $isHost = (int) DB::value('SELECT host_id FROM properties WHERE id = ?', [(int) $b['property_id']]) === $actingUserId;
+            if (in_array($action, ['approve', 'decline'], true)) {
+                if (!$isHost) {
+                    return [false, 'Only the property host can approve or decline this request (M08).'];
+                }
+            } elseif (!$isGuest && !$isHost) {
+                return [false, 'You cannot modify that reservation.'];
+            }
         }
 
         /* The money machine, honestly: arrival flips the stay to active but
@@ -448,8 +500,15 @@ final class BookingService
            line): nobody checks in before the arrival day, nothing “checks
            out” before the stay has run. */
         if ($actingUserId !== null) {
-            if ($action === 'checkin' && (string) ($b['checkin'] ?? '') > date('Y-m-d')) {
-                return [false, 'Check-in opens on your arrival day (' . (string) $b['checkin'] . ').'];
+            if ($action === 'checkin') {
+                if ((string) ($b['checkin'] ?? '') > date('Y-m-d')) {
+                    return [false, 'Check-in opens on your arrival day (' . (string) $b['checkin'] . ').'];
+                }
+                // Phase 2 (WP10, A53/A54): Verify captured payment exists
+                $hasCaptured = Ledger::bookingEscrowBalance((int) $b['id']) > 0 || (string) ($b['status'] ?? '') === 'confirmed';
+                if (!$hasCaptured && (int) ($b['total'] ?? 0) > 0) {
+                    return [false, 'Check-in requires a confirmed, paid reservation (A53/A54).'];
+                }
             }
             if ($action === 'checkout' && (string) ($b['checkout'] ?? '') > date('Y-m-d')) {
                 return [false, 'Check-out is recorded on or after your departure day (' . (string) $b['checkout'] . ').'];
@@ -470,6 +529,10 @@ final class BookingService
 
         if ($action === 'cancel' || $action === 'decline') {
             DB::run("UPDATE payments SET status = 'refunded' WHERE booking_id = ?", [(int) $b['id']]);
+            // Phase 2 (WP09/WP10): Release night holds on cancellation
+            if (DB::tableExists('night_holds')) {
+                DB::run("UPDATE night_holds SET status = 'released' WHERE booking_id = ?", [(int) $b['id']]);
+            }
             $calc = Cancellations::compute($b);
             $refundFen = $calc['refund_fen'];
             if ($refundFen > 0) {
@@ -535,6 +598,30 @@ final class BookingService
             'message' => json_encode($in),
             'meta'    => $ref,
         ]);
+
+        // Phase 2 (WP10): Record in booking_changes with re-quoted delta
+        if (DB::tableExists('booking_changes')) {
+            $prop = Repo::propertyById((int) $b['property_id']);
+            $newCheckin = (string) ($in['checkin'] ?: $b['checkin']);
+            $newCheckout = (string) ($in['checkout'] ?: $b['checkout']);
+            $newGuests = (int) ($in['guests'] ?: $b['guests']);
+            $newNights = nights_between($newCheckin, $newCheckout);
+            $newQuote = $prop ? Pricing::quote($prop, $newNights, [], '', 0, $newCheckin, $newCheckout) : [];
+            $deltaNaira = ((int) ($newQuote['total'] ?? $b['total'])) - (int) $b['total'];
+
+            DB::insert('booking_changes', [
+                'booking_id'        => (int) $b['id'],
+                'proposed_checkin'  => $newCheckin,
+                'proposed_checkout' => $newCheckout,
+                'proposed_guests'   => $newGuests,
+                'delta_quote'       => json_encode(['new_quote' => $newQuote, 'delta' => $deltaNaira]),
+                'status'            => 'pending_host',
+                'note'              => (string) ($in['note'] ?? ''),
+                'expires_at'        => date('Y-m-d H:i:s', strtotime('+72 hours')),
+                'created_at'        => date('Y-m-d H:i:s'),
+            ]);
+        }
+
         return [true, 'Modification requested — the host will confirm shortly.'];
     }
 }
