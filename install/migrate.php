@@ -69,6 +69,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-3 trust & identity (WP12-WP16): verify_tokens, kyc_documents, user_prefs, safety
+        foreach (ensure_phase3_trust_identity() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -612,6 +617,201 @@ function ensure_phase2_booking_integrity(): array
         }
     } catch (Throwable $e) {
         $lines[] = 'booking_changes setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
+
+/**
+ * Phase-3 trust & identity schema (WP12-WP16).
+ *
+ *  • verify_tokens — email/phone challenges and password recovery;
+ *  • kyc_documents — secure multi-kind KYC document vault and reviewer workflow;
+ *  • user_prefs — typed user preference persistence;
+ *  • safety_reports & user_blocks — community safety, abuse reporting and 2-way block engine.
+ *
+ * @return string[]
+ */
+function ensure_phase3_trust_identity(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('verify_tokens')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS verify_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    purpose VARCHAR(32) NOT NULL,
+                    token_hash CHAR(64) NOT NULL UNIQUE,
+                    code_hash CHAR(64) NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    expires_at DATETIME NOT NULL,
+                    consumed_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS verify_tokens (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    purpose VARCHAR(32) NOT NULL,
+                    token_hash CHAR(64) NOT NULL,
+                    code_hash CHAR(64) DEFAULT NULL,
+                    attempts TINYINT(3) NOT NULL DEFAULT 0,
+                    expires_at DATETIME NOT NULL,
+                    consumed_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_verify_token_hash (token_hash),
+                    KEY ix_verify_user_purpose (user_id, purpose),
+                    KEY ix_verify_expires (expires_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'verify_tokens created (WP12 challenge tokens & recovery).';
+        } else {
+            $lines[] = 'verify_tokens already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'verify_tokens setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('kyc_documents')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS kyc_documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    kind VARCHAR(32) NOT NULL,
+                    storage_key VARCHAR(255) NOT NULL,
+                    mime VARCHAR(64) NOT NULL,
+                    bytes INTEGER NOT NULL,
+                    sha256 CHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "uploaded",
+                    review_note TEXT NULL,
+                    reviewed_by INTEGER NULL,
+                    reviewed_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS kyc_documents (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    kind VARCHAR(32) NOT NULL,
+                    storage_key VARCHAR(255) NOT NULL,
+                    mime VARCHAR(64) NOT NULL,
+                    bytes INT(10) UNSIGNED NOT NULL,
+                    sha256 CHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "uploaded",
+                    review_note TEXT DEFAULT NULL,
+                    reviewed_by INT(10) UNSIGNED DEFAULT NULL,
+                    reviewed_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_kyc_user (user_id),
+                    KEY ix_kyc_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'kyc_documents created (WP14 document vault).';
+        } else {
+            $lines[] = 'kyc_documents already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'kyc_documents setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('user_prefs')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS user_prefs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    pref_key VARCHAR(64) NOT NULL,
+                    pref_val TEXT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id, pref_key)
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS user_prefs (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    pref_key VARCHAR(64) NOT NULL,
+                    pref_val TEXT DEFAULT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_user_pref_key (user_id, pref_key),
+                    KEY ix_user_prefs_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'user_prefs created (WP15 preference persistence).';
+        } else {
+            $lines[] = 'user_prefs already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'user_prefs setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('safety_reports')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS safety_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reporter_id INTEGER NOT NULL,
+                    target_type VARCHAR(32) NOT NULL,
+                    target_id VARCHAR(64) NOT NULL,
+                    category VARCHAR(64) NOT NULL,
+                    detail TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "new",
+                    assigned_admin INTEGER NULL,
+                    resolution_note TEXT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS safety_reports (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    reporter_id INT(10) UNSIGNED NOT NULL,
+                    target_type VARCHAR(32) NOT NULL,
+                    target_id VARCHAR(64) NOT NULL,
+                    category VARCHAR(64) NOT NULL,
+                    detail TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "new",
+                    assigned_admin INT(10) UNSIGNED DEFAULT NULL,
+                    resolution_note TEXT DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_report_reporter (reporter_id),
+                    KEY ix_report_target (target_type, target_id),
+                    KEY ix_report_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'safety_reports created (WP16 concern triage).';
+        }
+
+        if (!DB::tableExists('user_blocks')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS user_blocks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    blocked_user_id INTEGER NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (user_id, blocked_user_id)
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS user_blocks (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    blocked_user_id INT(10) UNSIGNED NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_user_block_pair (user_id, blocked_user_id),
+                    KEY ix_block_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'user_blocks created (WP16 server-side blocks).';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'safety tables setup error: ' . $e->getMessage();
     }
 
     return $lines;

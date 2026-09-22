@@ -2239,13 +2239,40 @@ function pAccount(){
       <b style="font-family:var(--fs-serif);font-size:19px">Report, block &amp; community</b>
       <p class="small" style="margin:6px 0 14px">Respect is the house rule. Every member is protected by our anti-discrimination policy and community guidelines.</p>
       <div class="btnrow" style="justify-content:center">
-        <button class="btn btn-ghost btn-sm" onclick="toast('Reporting centre opened — we respond within 24h','shield')">Report a concern</button>
+        <button class="btn btn-ghost btn-sm" onclick="openReportModal('community','0')">Report a concern</button>
         <button class="btn btn-ghost btn-sm" onclick="toast('Blocked users are never shown your listings','lock')">Blocked users</button>
         <button class="btn btn-ghost btn-sm" data-goto="/about">NDPR &amp; compliance</button>
       </div>
     </div>
   </div></div>`;
 }
+function openReportModal(targetType, targetId){
+  openModal(`<h2 style="margin-bottom:4px">Report a safety concern</h2>
+    <p class="small" style="margin-bottom:14px">Our Trust &amp; Safety team investigates every report within 24 hours.</p>
+    <div class="frm-row"><label>Reason</label>
+      <select class="inp" id="repCat">
+        <option value="safety">Safety / security violation</option>
+        <option value="scam">Fraud / scam attempt</option>
+        <option value="harassment">Harassment / offensive behavior</option>
+        <option value="inaccurate">Inaccurate listing details</option>
+        <option value="other">Other issue</option>
+      </select>
+    </div>
+    <div class="frm-row"><label>Details</label>
+      <textarea class="txa" id="repDetail" rows="3" placeholder="Describe what happened with as much detail as possible..."></textarea>
+    </div>
+    <div class="btnrow"><button class="btn btn-gold" onclick="submitReportModal('${targetType||"platform"}','${targetId||"0"}')">Submit report</button>
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>`);
+}
+async function submitReportModal(targetType, targetId){
+  const detail=($("#repDetail")?.value||"").trim();
+  const category=$("#repCat")?.value||"safety";
+  if(!detail){ toast("Please explain the concern for our safety team","x"); return; }
+  const r=await api("account.php",{action:"report-concern",target_type:targetType,target_id:targetId,category,detail});
+  closeModal();
+  toast(r.message||"Report submitted to Trust & Safety","shield");
+}
+
 function openPasswordChange(){
   openModal(`<h2 style="margin-bottom:4px">Change your password</h2>
     <p class="small" style="margin-bottom:14px">Choose something long — a short phrase beats a scrambled word.</p>
