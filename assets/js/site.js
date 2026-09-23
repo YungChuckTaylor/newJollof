@@ -1893,7 +1893,8 @@ async function wlCreate(){
   const r=await api("wishlist.php",{action:"create",name:name.trim()});
   if(!r.ok){ toast(r.message||"Could not create that list","x"); return; }
   await syncState(false);
-  S.activeWishlist=r.slug||name.trim();
+  const createdSlug=(r.data&&r.data.slug)||r.slug||name.trim();
+  S.activeWishlist=createdSlug;
   render(); toast("List created ✨","gift");
 }
 async function toggleWish(id,btn){
@@ -1910,7 +1911,8 @@ async function toggleWish(id,btn){
     if(btn){ btn.classList.toggle("active",had); btn.innerHTML=had?I.heartFill:I.heart; }
     renderBadges(); toast(r.message||"Could not update your wishlist","x"); return;
   }
-  toast(r.saved?"Saved to your wishlist — alerts on":"Removed from wishlist","heart");
+  const isSaved = (r.data&&typeof r.data.saved!=="undefined") ? r.data.saved : r.saved;
+  toast(isSaved?"Saved to your wishlist — alerts on":"Removed from wishlist","heart");
   const grid=$("#staysGrid"); if(grid&&typeof filteredStays==="function") grid.innerHTML=filteredStays().map(stayCard).join("");
 }
 
@@ -1944,7 +1946,7 @@ async function toggleCompare(id){
   if(!requireAuth("compare residences")) return;
   const r=await api("compare.php",{action:"toggle",property:id});
   if(!r.ok){ toast(r.message||"Could not update compare","scale"); return; }
-  S.compare=r.compare||S.compare;
+  S.compare=(r.data&&r.data.compare)||r.compare||S.compare;
   toast(r.message||"Compare updated","scale");
   render(); renderBadges();
 }
@@ -3492,12 +3494,12 @@ function pReferral(){
     <div class="grid-2">
       <div class="panel" style="background:linear-gradient(150deg,var(--card),var(--gold-soft))">
         <h3 style="font-size:22px">Your code</h3>
-        <div style="font-family:var(--fs-serif);font-size:clamp(2rem,6vw,3.4rem);font-weight:600;letter-spacing:.18em;color:var(--accent);margin:12px 0">ADEBAYO10</div>
-        <div class="btnrow"><button class="btn btn-gold" onclick="toast('Code copied — paste it anywhere','share')">${I.share} Copy link</button>
+        <div style="font-family:var(--fs-serif);font-size:clamp(2rem,6vw,3.4rem);font-weight:600;letter-spacing:.18em;color:var(--accent);margin:12px 0">${esc((USER&&USER.referral)||'JOLLOF10')}</div>
+        <div class="btnrow"><button class="btn btn-gold" onclick="copyText(location.origin+URL('/')+'?ref='+encodeURIComponent((USER&&USER.referral)||'JOLLOF10'),'Referral link copied — ready to share')">${I.share} Copy link</button>
         <button class="btn btn-green" onclick="toast('Shared to WhatsApp ✨','send')">${I.send} Share on WhatsApp</button>
         <button class="btn btn-ghost" onclick="toast('Shared to Instagram stories','camera')">${I.camera} Instagram</button></div>
-        <div class="krow" style="margin-top:14px"><span class="k">Friends joined</span><span class="v">14</span></div>
-        <div class="krow"><span class="k">Credits earned</span><span class="v" style="color:var(--ok)">₦140,000</span></div>
+        <div class="krow" style="margin-top:14px"><span class="k">Friends joined</span><span class="v">${(USER&&USER.referralCount)||0}</span></div>
+        <div class="krow"><span class="k">Credits earned</span><span class="v" style="color:var(--ok)">${fmt((USER&&USER.referralCredits)||0)}</span></div>
       </div>
       <div class="panel"><h3 style="font-size:22px">Affiliate programme</h3>
         <p class="muted" style="font-size:14px">Travel bloggers, creators and influencers earn <b>8% commission</b> on every booking they refer — with a dashboard, real-time tracking and monthly payouts.</p>
