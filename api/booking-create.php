@@ -15,13 +15,13 @@ if (!$user && !config('booking.allow_guest_checkout')) {
     ], 401);
 }
 
-[$ok, $message, $booking] = BookingService::create([
+[$ok, $message, $booking, $redirectUrl] = BookingService::create([
     'property' => input_str('property'),
     'checkin'  => input_str('checkin'),
     'checkout' => input_str('checkout'),
     'guests'   => input_int('guests', 1),
     'policy'   => input_str('policy', 'moderate'),
-    'method'   => input_str('method', 'card'),
+    'method'   => 'paystack',
     'addons'   => (array) input('addons', []),
     'promo'    => input_str('promo'),
     /* the code, never an amount — BookingService reads the real balance (T-series) */
@@ -38,8 +38,10 @@ if (!$ok) {
     json_fail($message);
 }
 
-json_ok_state(
-    ['ref' => $booking['ref'], 'total' => (int) $booking['total'], 'status' => $booking['status'],
-     'redirect' => url('confirm.php?ref=' . urlencode((string) $booking['ref']))],
-    $message
-);
+json_ok([
+    'ref'          => $booking['ref'],
+    'total'        => (int) $booking['total'],
+    'status'       => $booking['status'],
+    'redirect_url' => $redirectUrl ?: '',
+    'redirect'     => url('confirm.php?ref=' . urlencode((string) $booking['ref'])),
+], $message);

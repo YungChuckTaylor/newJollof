@@ -61,22 +61,44 @@ final class PaystackProvider implements PaymentProvider
 
     public function __construct()
     {
-        $this->secretKey = (string) config('payments.paystack.secret_key', '');
-        $this->webhookSecret = (string) config('payments.paystack.webhook_secret', $this->secretKey);
+        $sec = (string) config('payments.paystack.secret_key', '');
+        if ($sec === '') {
+            $sec = (string) (getenv('PAYSTACK_SECRET_KEY') ?: '');
+        }
+        if ($sec === '' && DB::tableExists('settings')) {
+            $sec = (string) DB::value("SELECT svalue FROM settings WHERE skey = 'paystack_secret_key'", [], '');
+        }
+        $this->secretKey = $sec;
+
+        $whSec = (string) config('payments.paystack.webhook_secret', '');
+        if ($whSec === '') {
+            $whSec = (string) (getenv('PAYSTACK_WEBHOOK_SECRET') ?: '');
+        }
+        if ($whSec === '' && DB::tableExists('settings')) {
+            $whSec = (string) DB::value("SELECT svalue FROM settings WHERE skey = 'paystack_webhook_secret'", [], '');
+        }
+        if ($whSec === '') {
+            $whSec = $this->secretKey;
+        }
+        $this->webhookSecret = $whSec;
     }
 
     public function initiate(array $intent): array
     {
         if ($this->secretKey === '') {
-            throw new RuntimeException('Paystack secret key is not configured.');
+            throw new RuntimeException('Paystack secret key is not configured. Please add your Paystack API keys to config.php.');
         }
+
+        $callbackUrl = ($intent['kind'] ?? '') === 'giftcard'
+            ? absolute_url('api/verify-payment.php?trxref=' . urlencode((string) $intent['idempotency_key']))
+            : absolute_url('confirm.php?ref=' . urlencode((string) ($intent['booking_ref'] ?? '')));
 
         $url = 'https://api.paystack.co/transaction/initialize';
         $payload = [
             'amount'       => (int) $intent['amount_fen'], // Kobo
             'email'        => (string) ($intent['email'] ?? 'guest@jollofliving.com'),
             'reference'    => (string) $intent['idempotency_key'],
-            'callback_url' => url('confirm.php?ref=' . urlencode((string) ($intent['booking_ref'] ?? ''))),
+            'callback_url' => $callbackUrl,
             'metadata'     => [
                 'booking_id'  => $intent['booking_id'] ?? null,
                 'booking_ref' => $intent['booking_ref'] ?? null,
@@ -441,6 +463,21 @@ final class PaymentService
             }
 
             DB::commit();
+
+            // Dispatch confirmation emails and host alert once booking is captured
+            if ($bookingId > 0 && class_exists('BookingService') && class_exists('Mailer')) {
+                try {
+                    $bData = BookingService::find($bookingId);
+                    if ($bData && $bData['status'] === 'confirmed') {
+                        Mailer::bookingConfirmation($bData);
+                        Mailer::hostBookingAlert($bData);
+                        Mailer::sendBookingReceipt($bData);
+                    }
+                } catch (Throwable $mailEx) {
+                    error_log('Booking payment email alert failure: ' . $mailEx->getMessage());
+                }
+            }
+
             return true;
         } catch (Throwable $e) {
             DB::rollback();

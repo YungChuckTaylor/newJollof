@@ -220,17 +220,18 @@ final class BookingService
         $tier = $user['tier'] ?? 'bronze';
         $points = Pricing::points($q['total'], (string) $tier);
 
-        $method = (string) ($in['method'] ?? 'card');
-        $valid = array_column(Repo::payMethods(), 'id');
-        if (!in_array($method, $valid, true)) {
-            $method = $valid[0] ?? 'card';
-        }
+        // Enforce the single unified payment method (Paystack)
+        $method = 'paystack';
 
         $ref = booking_ref();
         $tries = 0;
         while (DB::value('SELECT 1 FROM bookings WHERE ref = ?', [$ref]) && $tries++ < 8) {
             $ref = booking_ref();
         }
+
+        $chargeAmount = !empty($in['split']) ? (int) ($q['halfNow'] ?? round($q['total'] / 2)) : (int) $q['total'];
+        $initialStatus = $isRequest ? 'pending' : ($chargeAmount <= 0 ? 'confirmed' : 'payment_required');
+        $initialEscrow = ($initialStatus === 'confirmed') ? 'held' : 'pending';
 
         DB::begin();
         try {
@@ -258,8 +259,8 @@ final class BookingService
                 'total'         => $q['total'],
                 'currency'      => 'NGN',
                 'points_earned' => $points,
-                'status'        => $isRequest ? 'pending' : 'confirmed',
-                'escrow_status' => 'held',
+                'status'        => $initialStatus,
+                'escrow_status' => $initialEscrow,
                 'checkin_code'  => str_pad((string) random_int(1000, 9999), 4, '0', STR_PAD_LEFT) . '#',
                 'notes'         => (string) ($in['notes'] ?? '') ?: null,
                 // a frozen copy of the quote, so an invoice always shows what was charged
@@ -284,8 +285,8 @@ final class BookingService
 
             DB::insert('booking_events', [
                 'booking_id' => $id,
-                'event'      => $isRequest ? 'requested' : 'confirmed',
-                'detail'     => 'Payment captured into escrow · ' . $method,
+                'event'      => $isRequest ? 'requested' : ($chargeAmount <= 0 ? 'confirmed' : 'checkout_initiated'),
+                'detail'     => $isRequest ? 'Reservation requested' : ($chargeAmount <= 0 ? 'Fully covered by gift card/credit' : 'Awaiting Paystack checkout · ' . money($chargeAmount)),
             ]);
 
             if ($q['promoCode']) {
@@ -309,20 +310,20 @@ final class BookingService
                 }
             }
 
-            $chargeAmount = !empty($in['split']) ? $q['halfNow'] : $q['total'];
+            $intentKey = hash('sha256', "booking:{$ref}:{$id}:{$chargeAmount}:" . time() . ':' . uniqid('', true));
+
             DB::insert('payments', [
                 'booking_id' => $id,
                 'user_id'    => $user['id'] ?? null,
-                'reference'  => $ref . '-P1',
-                'gateway'    => (string) config('payments.mode', 'record_only'),
+                'reference'  => $intentKey,
+                'gateway'    => 'paystack',
                 'amount'     => $chargeAmount,
                 'currency'   => 'NGN',
                 'status'     => 'initiated',
-                'payload'    => json_encode(['method' => $method, 'split' => !empty($in['split'])]),
+                'payload'    => json_encode(['method' => 'paystack', 'split' => !empty($in['split'])]),
             ]);
 
             // Phase 1 (WP04/WP05): Create PaymentIntent and post initial ledger holds
-            $intentKey = hash('sha256', "booking:$ref:$id:$chargeAmount");
             $intent = PaymentService::createIntent($id, $chargeAmount * 100, 'booking', (int) ($user['id'] ?? 0), $intentKey, [
                 'booking_ref' => $ref,
                 'email'       => $email,
@@ -338,12 +339,7 @@ final class BookingService
                 ], 'gift_redemption', (string) $giftCode, $id, (int) ($user['id'] ?? 0), 'Gift card credit applied to reservation');
             }
 
-            // In demo/sandbox or record_only mode, auto-capture intent into escrow
-            if (config('payments.mode', 'record_only') === 'record_only' || config('payments.mode') === 'sandbox') {
-                PaymentService::captureIntent((int) $intent['id'], ['source' => 'record_only_checkout']);
-            }
-
-            if ($user) {
+            if ($user && $initialStatus === 'confirmed') {
                 DB::run('UPDATE users SET points = points + ? WHERE id = ?', [$points, (int) $user['id']]);
                 DB::insert('points_ledger', [
                     'user_id'     => (int) $user['id'],
@@ -352,12 +348,6 @@ final class BookingService
                     'amount'      => $points,
                     'kind'        => 'earn',
                 ]);
-                Repo::notify(
-                    (int) $user['id'],
-                    $isRequest ? 'Booking request sent' : 'Booking confirmed',
-                    'Your stay at ' . $p['name'] . ' (' . $checkin . ' → ' . $checkout . ') · invoice ' . $ref . '.',
-                    $isRequest ? 'clock' : 'check'
-                );
             }
 
             DB::commit();
@@ -366,13 +356,70 @@ final class BookingService
             if (config('debug')) {
                 throw $ex;
             }
-            return [false, 'We could not complete that reservation. Please try again.', null];
+            return [false, 'We could not complete that reservation. Please try again.', null, null];
         }
 
-        audit($email, ($isRequest ? 'Booking request ' : 'Booking ') . $ref . ' · ' . $p['name'], 'ok');
         $booking = self::find($ref);
-        Mailer::bookingConfirmation($booking, $p);
-        return [true, $isRequest ? 'Request sent to the host.' : 'Reservation confirmed.', $booking];
+
+        // Case 1: Host approval request (no immediate charge)
+        if ($isRequest) {
+            audit($email, 'Booking request ' . $ref . ' · ' . $p['name'], 'ok');
+            Mailer::hostBookingAlert($booking);
+            return [true, 'Request sent to the host.', $booking, null];
+        }
+
+        // Case 2: Zero payable (100% covered by gift card or credit)
+        if ($chargeAmount <= 0) {
+            audit($email, 'Booking confirmed (gift/credit) ' . $ref . ' · ' . $p['name'], 'ok');
+            Mailer::bookingConfirmation($booking, $p);
+            Mailer::hostBookingAlert($booking);
+            Mailer::sendBookingReceipt($booking);
+            return [true, 'Reservation confirmed.', $booking, null];
+        }
+
+        // Case 3: Payable amount requires payment gateway processing
+        $mode = (string) config('payments.mode', 'paystack');
+
+        // Sandbox / Demo auto-capture
+        if ($mode === 'record_only' || $mode === 'sandbox') {
+            PaymentService::captureIntent((int) $intent['id'], ['source' => 'record_only_checkout']);
+            $booking = self::find($ref);
+            audit($email, 'Booking ' . $ref . ' · ' . $p['name'] . ' (sandbox)', 'ok');
+            Mailer::bookingConfirmation($booking, $p);
+            Mailer::hostBookingAlert($booking);
+            Mailer::sendBookingReceipt($booking);
+            return [true, 'Reservation confirmed (Sandbox Mode).', $booking, null];
+        }
+
+        // Live / Test Paystack gateway checkout
+        try {
+            $provider = PaymentService::provider('paystack');
+            $res = $provider->initiate([
+                'amount_fen'      => $chargeAmount * 100,
+                'email'           => $email,
+                'guest_name'      => $name,
+                'booking_ref'     => $ref,
+                'booking_id'      => $id,
+                'idempotency_key' => $intentKey,
+                'kind'            => 'booking',
+            ]);
+
+            if (!empty($res['provider_ref'])) {
+                DB::update('payment_intents', ['provider_ref' => (string) $res['provider_ref']], 'id = ?', [(int) $intent['id']]);
+                DB::update('payments', ['reference' => (string) $res['provider_ref']], 'booking_id = ?', [$id]);
+            }
+
+            audit($email, 'Booking payment initiated ' . $ref . ' via Paystack', 'ok');
+            $redirectUrl = (string) ($res['redirect_url'] ?? '');
+            return [true, 'Connecting to Paystack secure checkout...', $booking, $redirectUrl];
+        } catch (Throwable $e) {
+            // Cancel booking and release holds if gateway initialization fails
+            DB::update('bookings', ['status' => 'cancelled'], 'id = ?', [$id]);
+            if (DB::tableExists('night_holds')) {
+                DB::run('DELETE FROM night_holds WHERE booking_id = ?', [$id]);
+            }
+            return [false, 'Payment initialization failed: ' . $e->getMessage(), null, null];
+        }
     }
 
     private static function date($v): ?string

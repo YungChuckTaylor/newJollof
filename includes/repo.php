@@ -168,12 +168,14 @@ final class Repo
 
     public static function payMethods(): array
     {
-        return self::memo('paym', static fn() => array_map(static fn($m) => [
-            'id'   => $m['mkey'],
-            'name' => $m['name'],
-            'note' => $m['note'],
-            'ico'  => $m['icon'],
-        ], DB::all('SELECT * FROM pay_methods WHERE active = 1 ORDER BY sort_order')));
+        return self::memo('paym', static fn() => [
+            [
+                'id'   => 'paystack',
+                'name' => 'Pay Now',
+                'note' => 'Instant & secure checkout via Paystack (Cards, Bank Transfer, Apple Pay, USSD)',
+                'ico'  => 'shield',
+            ],
+        ]);
     }
 
     /* ========================================================= properties */

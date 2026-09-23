@@ -8,6 +8,20 @@ require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
 $ref = (string) ($_GET['ref'] ?? '');
+$payRef = (string) ($_GET['reference'] ?? $_GET['trxref'] ?? '');
+
+// If returning from Paystack checkout callback, verify and capture payment
+if ($payRef !== '') {
+    $intent = DB::row('SELECT * FROM payment_intents WHERE idempotency_key = ? OR provider_ref = ?', [$payRef, $payRef]);
+    if ($intent && $intent['status'] !== 'captured') {
+        $provider = PaymentService::provider((string) $intent['provider']);
+        [$status, $raw] = $provider->verify((string) ($intent['provider_ref'] ?: $payRef));
+        if ($status === 'captured') {
+            PaymentService::captureIntent((int) $intent['id'], (array) $raw);
+        }
+    }
+}
+
 $booking = $ref !== '' ? BookingService::find($ref) : null;
 
 // only the guest who made it (or an admin) may view a reservation

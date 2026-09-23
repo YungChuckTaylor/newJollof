@@ -548,6 +548,22 @@ function ensure_phase1_money_machine(): array
         $lines[] = 'outbox_events setup error: ' . $e->getMessage();
     }
 
+    // Streamline pay_methods table: deactivate all legacy/secondary payment methods, keep only Paystack as "Pay Now"
+    try {
+        if (DB::tableExists('pay_methods')) {
+            DB::run("UPDATE pay_methods SET active = 0 WHERE mkey <> 'paystack'");
+            $paystackExists = DB::value("SELECT 1 FROM pay_methods WHERE mkey = 'paystack'");
+            if ($paystackExists) {
+                DB::run("UPDATE pay_methods SET name = 'Pay Now', note = 'Instant & secure checkout via Paystack (Cards, Bank Transfer, Apple Pay, USSD)', icon = 'shield', active = 1, sort_order = 1 WHERE mkey = 'paystack'");
+            } else {
+                DB::run("INSERT INTO pay_methods (mkey, name, note, icon, active, sort_order) VALUES ('paystack', 'Pay Now', 'Instant & secure checkout via Paystack (Cards, Bank Transfer, Apple Pay, USSD)', 'shield', 1, 1)");
+            }
+            $lines[] = 'pay_methods streamlined: single Paystack gateway activated as "Pay Now".';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'pay_methods streamline notice: ' . $e->getMessage();
+    }
+
     return $lines;
 }
 

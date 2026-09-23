@@ -1368,7 +1368,7 @@ const BOOK_STATE = {
 const jlFlag=(k)=>!!(window.JL&&JL.flags&&JL.flags[k]===true);
 function pBooking(id, q) {
   const p=PROPERTIES.find(x=>x.id===id); if(!p) return p404();
-  BOOK_STATE.id=id; BOOK_STATE.req=!!(q&&q.req); BOOK_STATE.addons=[]; BOOK_STATE.promo=null; BOOK_STATE.giftCode=null; BOOK_STATE.giftAmt=0; BOOK_STATE.method="card"; BOOK_STATE.split=false;
+  BOOK_STATE.id=id; BOOK_STATE.req=!!(q&&q.req); BOOK_STATE.addons=[]; BOOK_STATE.promo=null; BOOK_STATE.giftCode=null; BOOK_STATE.giftAmt=0; BOOK_STATE.method="paystack"; BOOK_STATE.split=false;
   return `
   <div class="page-top"></div>
   <div class="page-head"><div class="wrap">
@@ -1466,17 +1466,19 @@ function bkPayment(){
   const m=bkCalc();
   return `
   <div class="wizard-step">
-    <h2>Payment</h2>
-    <div class="sub">Multi-currency · escrow-protected · PCI-DSS secure. You won't be charged until you confirm.</div>
+    <h2>Make Payment</h2>
+    <div class="sub">Instant &amp; secure checkout · escrow-protected · PCI-DSS certified. You won't be charged until you confirm.</div>
     <div class="grid-2" style="grid-template-columns:1fr 1fr">
       <div>
-        <div class="grid-2" style="grid-template-columns:1fr 1fr;gap:9px">
-          ${PAY_METHODS.map(pm=>`<button class="panel pay-method" data-pm="${pm.id}" style="text-align:left;cursor:pointer;padding:14px;display:flex;gap:10px;align-items:center;${BOOK_STATE.method===pm.id?"border-color:var(--accent);background:linear-gradient(150deg,var(--card),var(--gold-soft))":""}">
-            <span class="why-ico" style="width:34px;height:34px;border-radius:9px;margin:0">${I[pm.ico]}</span>
-            <span><b style="font-size:13.5px;font-weight:500;display:block">${pm.name}</b><span class="small" style="font-size:11px">${pm.note}</span></span>
-          </button>`).join("")}
+        <div class="panel pay-method" data-pm="paystack" style="text-align:left;cursor:default;padding:18px 20px;display:flex;gap:14px;align-items:center;border-color:var(--accent);background:linear-gradient(150deg,var(--card),var(--gold-soft));border-radius:12px">
+          <span class="why-ico" style="width:42px;height:42px;border-radius:10px;margin:0;background:var(--card);color:var(--gold);display:grid;place-items:center">${I.shield}</span>
+          <div style="flex:1">
+            <b style="font-size:15.5px;font-weight:600;display:block">Pay Now</b>
+            <span class="small" style="font-size:12px;color:var(--ink-soft)">Instant &amp; secure checkout via Paystack · Cards, Bank Transfer, Apple Pay, USSD</span>
+          </div>
+          <span class="pill-status ok" style="font-size:11.5px">Selected</span>
         </div>
-        <div class="ai-callout" style="margin-top:14px">${I.bolt}<span><b>Crypto (BTC / USDT)</b> moves to beta next quarter — join the waitlist from your account.</span></div>
+        <div class="store-note" style="margin-top:14px">${I.lock}<span>Protected with 256-bit bank-grade encryption. Supported payment methods: <b>Visa, Mastercard, Verve, Apple Pay &amp; Bank Transfer</b>.</span></div>
         <div class="panel" style="margin-top:14px">
           <h3 style="font-size:17px">Promo code &amp; gift cards</h3>
           <div style="display:flex;gap:8px;margin-top:10px">
@@ -1529,7 +1531,7 @@ function bkReview(){
         <div class="panel">
           <h3 style="font-size:17px">What's included</h3>
           <div class="krow"><span class="k">Cancellation</span><span class="v">${BOOK_STATE.policy[0].toUpperCase()+BOOK_STATE.policy.slice(1)} · full terms shown before paying</span></div>
-          <div class="krow"><span class="k">Payment</span><span class="v">${PAY_METHODS.find(x=>x.id===BOOK_STATE.method).name}</span></div>
+          <div class="krow"><span class="k">Payment</span><span class="v">Pay Now (Paystack Secure Checkout)</span></div>
           <div class="krow"><span class="k">Add-ons</span><span class="v">${BOOK_STATE.addons.length?BOOK_STATE.addons.map(k=>ADDONS[k].name).join(", "):"None"}</span></div>
           <div class="krow"><span class="k">Split payment</span><span class="v">${BOOK_STATE.split?"50% now · 50% at check-in":"—"}</span></div>
           ${BOOK_STATE.req?'<div class="krow"><span class="k">Host confirmation</span><span class="v">Within 24 hours</span></div>':""}
@@ -1557,7 +1559,7 @@ function bkReview(){
     </div>
     <div class="wizard-foot">
       <button class="btn btn-ghost" onclick="bkStep(2)">← Payment</button>
-      <button class="btn btn-gold btn-lg" id="bkConfirm">${BOOK_STATE.req?"Send request":"Confirm & pay "+fmt(BOOK_STATE.split?Math.round(m.total/2):m.total)}</button>
+      <button class="btn btn-gold btn-lg" id="bkConfirm">${BOOK_STATE.req?"Send request":"Pay Now · "+fmt(BOOK_STATE.split?Math.round(m.total/2):m.total)}</button>
     </div>
   </div>`;
 }
@@ -1580,8 +1582,7 @@ function bindBooking(id,q){
       if(PROMOS[code]){ BOOK_STATE.promo=code; toast(`Promo applied — ${PROMOS[code].label}`,"gift"); bkStep(2); }
       else toast("That code isn't valid (try JOLLOF10)","x"); return; }
     const pmbtn=e.target.closest("[data-pm]"); if(pmbtn){ BOOK_STATE.method=pmbtn.dataset.pm;
-      $$(".pay-method").forEach(x=>x.style.borderColor=""); pmbtn.style.borderColor="var(--accent)";
-      toast(`Payment method: ${PAY_METHODS.find(x=>x.id===BOOK_STATE.method).name}`,"wallet"); return; }
+      $$(".pay-method").forEach(x=>x.style.borderColor=""); pmbtn.style.borderColor="var(--accent)"; return; }
     const gd=e.target.closest("#bkGd"); if(gd){ BOOK_STATE.guests=Math.max(1,BOOK_STATE.guests-1); $("#bkG").textContent=BOOK_STATE.guests; return; }
     const gu=e.target.closest("#bkGu"); if(gu){ BOOK_STATE.guests=Math.min((PROPERTIES.find(x=>x.id===BOOK_STATE.id)||PROPERTIES[0]).guests,BOOK_STATE.guests+1); $("#bkG").textContent=BOOK_STATE.guests; return; }
   };
@@ -1597,23 +1598,33 @@ function bindBooking(id,q){
 function refreshCal(){}
 async function confirmBooking(p){
   const btn=$("#bkConfirm");
-  if(btn){ btn.disabled=true; btn.dataset.label=btn.textContent; btn.textContent="Securing your reservation…"; }
+  if(btn){ btn.disabled=true; btn.dataset.label=btn.textContent; btn.textContent="Connecting to payment…"; }
   const payload={
     property:p.id,
     checkin:BOOK_STATE.in, checkout:BOOK_STATE.out,
     guests:BOOK_STATE.guests, policy:BOOK_STATE.policy,
-    method:BOOK_STATE.method, addons:BOOK_STATE.addons,
+    method:"paystack", addons:BOOK_STATE.addons,
     promo:BOOK_STATE.promo||"", giftCode:BOOK_STATE.giftCode||"",
     split:!!BOOK_STATE.split, request:!!BOOK_STATE.req,
     name:$("#bkName")?.value||"", email:$("#bkEmail")?.value||"", phone:$("#bkPhone")?.value||"",
   };
   const r=await api("booking-create.php",payload);
   if(!r.ok){
-    if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||"Confirm & pay"; }
+    if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||"Pay Now"; }
     toast(r.message||"We could not complete that reservation.","x");
     if(r.requiresAuth) setTimeout(()=>nav("/auth?next="+encodeURIComponent(location.pathname+location.search)),1000);
     return;
   }
+
+  // Redirect directly to Paystack secure hosted checkout if gateway URL is returned
+  if(r.data && r.data.redirect_url){
+    toast("Redirecting to Paystack secure checkout…","lock");
+    if(btn) btn.textContent="Redirecting to Paystack…";
+    setTimeout(()=>{ location.href=r.data.redirect_url; }, 500);
+    return;
+  }
+
+  // Fallback for auto-captured sandbox or non-instant request
   nav("/confirm/"+encodeURIComponent(r.data.ref));
 }
 function pConfirm(ref){
@@ -1621,26 +1632,38 @@ function pConfirm(ref){
   const b=(JL.booking)||S.bookings.find(x=>x.ref===decodeURIComponent(ref));
   if(!b) return p404();
   const p=PROPERTIES.find(x=>x.id===b.prop)||{};
-  const earned=b.pointsEarned||0;  return `
+  const earned=b.pointsEarned||0;
+  const isPayReq = b.status === "payment_required";
+  const methodName = (PAY_METHODS.find(x=>x.id===b.method)||PAY_METHODS[0]||{name:"Pay Now"}).name;
+
+  return `
   <div class="page-top"></div>
   <div style="padding:calc(var(--header-h) + 30px) 0 70px"><div class="wrap" style="max-width:780px">
     <div style="text-align:center;margin-bottom:28px">
-      <div style="width:84px;height:84px;border-radius:50%;background:var(--green-soft);color:var(--ok);display:grid;place-items:center;margin:0 auto 18px">${I.checkCircle.replace("<svg","<svg style='width:40px;height:40px'")}</div>
-      <span class="eyebrow center">${b.req?"Request sent":"Reservation confirmed"}</span>
-      <h1 style="font-size:clamp(1.9rem,4vw,2.8rem);margin:12px 0 8px">${b.req?"The host will confirm within 24 hours":"See you in "+esc(b.city)+", soon."}</h1>
-      <p class="muted">Reference <b style="color:var(--accent)">${b.ref}</b> · A confirmation has been sent by email, SMS &amp; WhatsApp.</p>
+      <div style="width:84px;height:84px;border-radius:50%;background:${isPayReq?"rgba(163,52,31,.12)":"var(--green-soft)"};color:${isPayReq?"var(--bad)":"var(--ok)"};display:grid;place-items:center;margin:0 auto 18px">${(isPayReq?I.lock:I.checkCircle).replace("<svg","<svg style='width:40px;height:40px'")}</div>
+      <span class="eyebrow center">${b.req?"Request sent":isPayReq?"Payment required":"Reservation confirmed"}</span>
+      <h1 style="font-size:clamp(1.9rem,4vw,2.8rem);margin:12px 0 8px">${b.req?"The host will confirm within 24 hours":isPayReq?"Complete your payment to lock in your stay":"See you in "+esc(b.city)+", soon."}</h1>
+      <p class="muted">Reference <b style="color:var(--accent)">${b.ref}</b> · ${isPayReq?"Payment is required to secure your reservation.":"A confirmation has been sent by email, SMS & WhatsApp."}</p>
     </div>
+
+    ${isPayReq?`
+    <div class="panel" style="background:#fffcf2;border:1px solid #ebd99f;padding:22px;text-align:center;margin-bottom:20px;border-radius:12px">
+      <h3 style="margin:0 0 6px;color:#7a5c00;font-size:18px">Payment Pending</h3>
+      <p class="muted" style="margin:0 0 16px;font-size:14px">Your dates are temporarily held. Please complete payment to receive your digital check-in code.</p>
+      <button class="btn btn-gold btn-lg" onclick="retryBookingPayment('${esc(b.ref)}')">Make Payment with Paystack →</button>
+    </div>`:""}
+
     <div class="panel" style="padding:26px">
       <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line-soft)">
         <img src="${img(b.img)}" style="width:130px;height:92px;object-fit:cover;border-radius:12px" alt="">
         <div style="flex:1;min-width:200px"><div class="small">${b.city} · ${esc(b.area)}</div>
           <b style="font-family:var(--fs-serif);font-size:22px">${esc(b.name)}</b>
           <div class="small">${b.in} → ${b.out} · ${b.nights} nights · ${b.guests} guests</div></div>
-        <div class="pill-status ok">${b.status==="confirmed"?"Confirmed":"Awaiting host"}</div>
+        <div class="pill-status ${b.status==='confirmed'?'ok':b.status==='pending'?'warn':'bad'}">${b.status==="confirmed"?"Confirmed":b.status==="pending"?"Awaiting host":"Payment required"}</div>
       </div>
       <div class="breakdown" style="border:none;padding-top:14px">
-        <div class="brow"><span>Total (${b.split?"split 50/50":PAY_METHODS.find(x=>x.id===b.method).name})</span><span><b style="font-family:var(--fs-serif);font-size:22px">${fmt(b.total)}</b></span></div>
-        <div class="brow"><span>Paid in escrow</span><span>${fmt(b.split?Math.round(b.total/2):b.total)}</span></div>
+        <div class="brow"><span>Total (${b.split?"split 50/50":methodName})</span><span><b style="font-family:var(--fs-serif);font-size:22px">${fmt(b.total)}</b></span></div>
+        <div class="brow"><span>Paid in escrow</span><span>${fmt(isPayReq?0:(b.split?Math.round(b.total/2):b.total))}</span></div>
         <div class="brow"><span>Security deposit held</span><span>${fmt(Math.round(b.total*RATES.deposit))}</span></div>
         <div class="brow" style="color:var(--ok)"><span>Jollof Points earned</span><span>+${earned.toLocaleString()} pts</span></div>
       </div>
@@ -1648,8 +1671,8 @@ function pConfirm(ref){
     <div class="grid-2" style="margin-top:18px">
       <div class="panel" style="text-align:center;padding:20px">
         <div class="small">Digital check-in</div>
-        <div style="font-family:var(--fs-serif);font-size:34px;font-weight:600;letter-spacing:.14em;margin:6px 0">${esc((b.code||((S.bookings.find(x=>x.ref===b.ref)||{}).code))||"on confirmation")}</div>
-        <div class="small">Valid from ${b.in}, 3:00 PM · ${jlFlag("smartlock.sync")?"synced to the door lock":"your host confirms how the code is delivered"}</div>
+        <div style="font-family:var(--fs-serif);font-size:34px;font-weight:600;letter-spacing:.14em;margin:6px 0">${esc(isPayReq?"LOCKED":((b.code||((S.bookings.find(x=>x.ref===b.ref)||{}).code))||"on confirmation"))}</div>
+        <div class="small">${isPayReq?"Issued automatically once payment is verified":"Valid from "+b.in+", 3:00 PM · "+(jlFlag("smartlock.sync")?"synced to the door lock":"your host confirms how the code is delivered")}</div>
       </div>
       <div class="panel" style="text-align:center;padding:20px">
         <div class="small">Digital lease agreement</div>
@@ -1658,12 +1681,27 @@ function pConfirm(ref){
       </div>
     </div>
     <div class="btnrow" style="justify-content:center;margin-top:24px">
-      <a class="btn btn-green" data-goto="/trips">${I.calendar} View my trips</a>
+      ${isPayReq?`<button class="btn btn-gold" onclick="retryBookingPayment('${esc(b.ref)}')">Complete payment</button>`:`<a class="btn btn-green" data-goto="/trips">${I.calendar} View my trips</a>`}
       <a class="btn btn-ghost" onclick="gcalStay('${b.prop}')">${I.calendar} Add to calendar</a>
       <button class="btn btn-ghost" onclick="openInvoice('${b.ref}')">${I.doc} Invoice PDF</button>
     </div>
     <p class="small" style="text-align:center;margin-top:18px">${I.shield} Funds are held in escrow by Jollof Living and released to the host upon check-out.</p>
   </div></div>`;
+}
+
+async function retryBookingPayment(ref){
+  toast("Connecting to Paystack secure checkout…","lock");
+  const r=await api("pay.php",{ action:"initiate", kind:"booking", ref });
+  if(!r.ok){
+    toast(r.message||"Could not initialize Paystack payment.","x");
+    return;
+  }
+  if(r.data && r.data.redirect_url){
+    location.href = r.data.redirect_url;
+  } else {
+    toast(r.message||"Payment processed.","check");
+    setTimeout(()=>location.reload(), 800);
+  }
 }
 function openInvoice(ref){
   const b=S.bookings.find(x=>x.ref===ref)||S.bookings[0];

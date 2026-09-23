@@ -126,6 +126,66 @@ if ($action === 'initiate') {
         } catch (Throwable $e) {
             json_fail('Payment initialization failed: ' . $e->getMessage());
         }
+    } elseif ($kind === 'booking') {
+        $bookingRef = input_str('ref');
+        $booking = BookingService::find($bookingRef);
+        if (!$booking) {
+            json_fail('Reservation not found.', 404);
+        }
+
+        if ($booking['status'] === 'confirmed') {
+            json_ok(['status' => 'confirmed'], 'This reservation is already confirmed.');
+        }
+
+        $due = !empty($booking['split_payment']) ? (int) round(((int) $booking['total']) / 2) : (int) $booking['total'];
+        $amountFen = $due * 100;
+        $idemKey = hash('sha256', "booking:{$booking['ref']}:" . time() . ':' . uniqid('', true));
+
+        $intent = PaymentService::createIntent((int) $booking['id'], $amountFen, 'booking', (int) ($booking['user_id'] ?? 0), $idemKey, [
+            'booking_ref' => $booking['ref'],
+            'email'       => (string) $booking['guest_email'],
+            'name'        => (string) $booking['guest_name'],
+            'split'       => !empty($booking['split_payment']),
+        ]);
+
+        $mode = (string) config('payments.mode', 'paystack');
+        if ($mode === 'record_only' || $mode === 'sandbox') {
+            PaymentService::captureIntent((int) $intent['id'], ['source' => 'sandbox_autocapture']);
+            json_ok([
+                'mode'         => 'sandbox',
+                'ref'          => $booking['ref'],
+                'amount'       => $due,
+                'redirect_url' => '',
+            ], 'Payment confirmed (Sandbox Mode).');
+        }
+
+        try {
+            $provider = PaymentService::provider('paystack');
+            $res = $provider->initiate([
+                'amount_fen'      => $amountFen,
+                'email'           => (string) $booking['guest_email'],
+                'guest_name'      => (string) $booking['guest_name'],
+                'booking_ref'     => $booking['ref'],
+                'booking_id'      => (int) $booking['id'],
+                'idempotency_key' => $idemKey,
+                'kind'            => 'booking',
+            ]);
+
+            if (!empty($res['provider_ref'])) {
+                DB::update('payment_intents', ['provider_ref' => (string) $res['provider_ref']], 'id = ?', [(int) $intent['id']]);
+                DB::update('payments', ['reference' => (string) $res['provider_ref']], 'booking_id = ?', [(int) $booking['id']]);
+            }
+
+            json_ok([
+                'mode'         => 'live',
+                'redirect_url' => $res['redirect_url'],
+                'access_code'  => $res['access_code'],
+                'reference'    => $idemKey,
+                'ref'          => $booking['ref'],
+            ], 'Redirecting to secure payment...');
+        } catch (Throwable $e) {
+            json_fail('Payment initialization failed: ' . $e->getMessage());
+        }
     }
 }
 

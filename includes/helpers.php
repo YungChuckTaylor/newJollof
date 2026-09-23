@@ -58,6 +58,25 @@ function url(string $path = ''): string
     return base_path() . '/' . $path;
 }
 
+/** Build a fully-qualified site URL: absolute_url('confirm.php') → https://example.com/confirm.php */
+function absolute_url(string $path = ''): string
+{
+    $rel = url($path);
+    if (preg_match('~^https?://~i', $rel)) {
+        return $rel;
+    }
+    $cfgRoot = trim((string) config('site.url', ''));
+    if ($cfgRoot !== '' && preg_match('~^https?://~i', $cfgRoot)) {
+        return rtrim($cfgRoot, '/') . '/' . ltrim($rel, '/');
+    }
+    $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        || (($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')
+        ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return $proto . '://' . $host . $rel;
+}
+
 /** Asset URL with a cache-busting stamp. */
 function asset(string $path): string
 {

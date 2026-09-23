@@ -1,0 +1,3716 @@
+{
+  "date": "2026-09-22",
+  "scope": "Isolated re-audit of the requested branch arena/01a096cd-newjollof, not production verification",
+  "source_commit": "19363b928dd2394b93010fde09a72014c95e6cab",
+  "audited_branch": "arena/01a096cd-newjollof",
+  "previous_audit": {
+    "branch": "arena/01a0c952-newjollof",
+    "commit": "5855dfdfb422c517ba630cb6f4955a368e45e4b3",
+    "superseded_by_this_report": true
+  },
+  "branch_delta": {
+    "files_changed": 17,
+    "paths": [
+      "DEPLOY_DISPUTES_LIVECHAT.md",
+      "agent.php",
+      "api/chat.php",
+      "api/dispute.php",
+      "assets/css/site.css",
+      "assets/js/chat.js",
+      "assets/js/site.js",
+      "includes/disputes.php",
+      "includes/livechat.php",
+      "includes/view.php",
+      "install/diagnose.php",
+      "install/index.php",
+      "install/migrate.php",
+      "install/schema/2026_09_12_disputes_and_live_chat.sql",
+      "install/why.php",
+      "jollof-update-disputes-livechat.zip",
+      "wal7zkit_jollof.sql"
+    ]
+  },
+  "environment": {
+    "php": "8.3.33 WebAssembly",
+    "database": "Local SQLite translated from the supplied MySQL schema, plus this branch’s support-module migration applied and the MySQL-declared unique indexes restored",
+    "browser": "Playwright Chromium",
+    "fixture": "59 base tables + 10 module tables, 442 selectively imported public catalogue rows; synthetic accounts and transactions only",
+    "mail": "disabled",
+    "external_payment_and_model_calls": "not made"
+  },
+  "harness_adaptations": [
+    "GLOB_BRACE replaced by merged extension globs in the isolated copy only",
+    "SQLite GREATEST registered in the isolated copy only",
+    "Browser static assets served from the same local files after a PHP-WASM socket-abort issue; pages/APIs still exercised over HTTP",
+    "Six MySQL-declared UNIQUE indexes restored on the module tables after the migration path proved they were stripped in SQLite (documented as F91 evidence)"
+  ],
+  "syntax": {
+    "php_files_parsed": 87,
+    "php_parse_errors": 0,
+    "javascript_node_check": "site.js and chat.js both pass node --check"
+  },
+  "api_checks": [
+    {
+      "id": "A01",
+      "feature": "Public home HTML and boot catalogue",
+      "result": "PASS",
+      "observed": {
+        "properties": 13
+      }
+    },
+    {
+      "id": "A02",
+      "feature": "Mutation rejects missing CSRF",
+      "result": "PASS",
+      "observed": "POST without CSRF"
+    },
+    {
+      "id": "A03",
+      "feature": "Mutation rejects GET",
+      "result": "PASS",
+      "observed": "GET newsletter endpoint"
+    },
+    {
+      "id": "A04",
+      "feature": "Anonymous wishlist requires account",
+      "result": "PASS",
+      "observed": {
+        "status": 401
+      }
+    },
+    {
+      "id": "A05",
+      "feature": "Invalid registration rejected",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "A06",
+      "feature": "Guest registration",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "A07",
+      "feature": "Account page and session persistence",
+      "result": "PASS",
+      "observed": {
+        "user_id": 17
+      }
+    },
+    {
+      "id": "A08",
+      "feature": "Separate guest registration",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "A09",
+      "feature": "Owner registration and provisioning",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "A10",
+      "feature": "Owner dashboard data provisioning",
+      "result": "PASS",
+      "observed": {
+        "channels": 4
+      }
+    },
+    {
+      "id": "A11",
+      "feature": "Cannot self-register as admin",
+      "result": "PASS",
+      "observed": {
+        "role": "guest"
+      }
+    },
+    {
+      "id": "A12",
+      "feature": "Dedicated admin login rejects incorrect configured OTP",
+      "result": "PASS",
+      "observed": {
+        "status": 401
+      }
+    },
+    {
+      "id": "A13",
+      "feature": "Admin MFA required on alternate email login",
+      "result": "FAIL",
+      "observed": {
+        "isAdmin_without_otp": true,
+        "mfa_enabled_in_test": true
+      }
+    },
+    {
+      "id": "A14",
+      "feature": "Guest cannot run admin actions",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "A15",
+      "feature": "Guest cannot alter host listings",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "A16",
+      "feature": "Wishlist add persists",
+      "result": "PASS",
+      "observed": {
+        "saved": true
+      }
+    },
+    {
+      "id": "A17",
+      "feature": "Named wishlist API creation",
+      "result": "PASS",
+      "observed": {
+        "slug": "december-trip"
+      }
+    },
+    {
+      "id": "A18",
+      "feature": "Named wishlist stores residence",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A19",
+      "feature": "Compare API persistence",
+      "result": "PASS",
+      "observed": {
+        "compare": [
+          "onyx"
+        ]
+      }
+    },
+    {
+      "id": "A20",
+      "feature": "Notification mark all read",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A21",
+      "feature": "UI notification preference payload respected",
+      "result": "FAIL",
+      "observed": {
+        "ui_sends_on": true,
+        "stored": [
+          {
+            "pref_value": "0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "A22",
+      "feature": "Waitlist enrolment and deduplication",
+      "result": "PASS",
+      "observed": {
+        "rows": 1
+      }
+    },
+    {
+      "id": "A23",
+      "feature": "Newsletter email capture and deduplication",
+      "result": "PASS",
+      "observed": "Subscriber saved once; delivery disabled in test"
+    },
+    {
+      "id": "A24",
+      "feature": "Experience request saves enquiry",
+      "result": "PASS",
+      "observed": {
+        "ok": true,
+        "experience_bookings": 0
+      }
+    },
+    {
+      "id": "A25",
+      "feature": "Experience dates and guest counts validated server-side",
+      "result": "FAIL",
+      "observed": {
+        "accepted_past_date_and_9999_guests": true
+      }
+    },
+    {
+      "id": "A26",
+      "feature": "Concierge catalogue-based reply",
+      "result": "PASS",
+      "observed": {
+        "reply_length": 436
+      }
+    },
+    {
+      "id": "A27",
+      "feature": "Concierge message persists and replies",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A28",
+      "feature": "Conversation ownership enforced",
+      "result": "PASS",
+      "observed": {
+        "status": 404
+      }
+    },
+    {
+      "id": "A29",
+      "feature": "Support message intake",
+      "result": "PASS",
+      "observed": {
+        "ok": true,
+        "marker_for_browser_check": true
+      }
+    },
+    {
+      "id": "A30",
+      "feature": "Listing submission creates pending property",
+      "result": "PASS",
+      "observed": {
+        "slug": "audit-lakeside-residence",
+        "pid": 15
+      }
+    },
+    {
+      "id": "A31",
+      "feature": "Web host cannot publish unapproved listing",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "A32",
+      "feature": "Admin can preview pending listing through preview link",
+      "result": "FAIL",
+      "observed": {
+        "status": 404
+      }
+    },
+    {
+      "id": "A33",
+      "feature": "Admin listing approval persists and notifies owner",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A34",
+      "feature": "Host base nightly-rate update",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A35",
+      "feature": "Host ownership prevents cross-owner edits",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "A36",
+      "feature": "Host calendar stores price and block",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A37",
+      "feature": "Bulk calendar-rate storage",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A38",
+      "feature": "Pricing rule storage",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A39",
+      "feature": "Co-host invitation record",
+      "result": "PASS",
+      "observed": {
+        "ok": true,
+        "email_dispatch_in_handler": false
+      }
+    },
+    {
+      "id": "A40",
+      "feature": "Message-template storage",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A41",
+      "feature": "Channel sync must not claim connection without credentials",
+      "result": "FAIL",
+      "observed": {
+        "claimed_message": "Airbnb connected — availability now syncs both ways.",
+        "recorded_status": "connected"
+      }
+    },
+    {
+      "id": "A42",
+      "feature": "Payout display-settings storage",
+      "result": "PASS",
+      "observed": {
+        "ok": true,
+        "only_last_four_stored": true
+      }
+    },
+    {
+      "id": "A43",
+      "feature": "Core stay reservation persisted",
+      "result": "PASS",
+      "observed": {
+        "ref": "JL-2026-4674",
+        "status": "confirmed"
+      }
+    },
+    {
+      "id": "A44",
+      "feature": "Confirmed booking backed by captured payment",
+      "result": "FAIL",
+      "observed": {
+        "booking_status": "confirmed",
+        "escrow_status": "held",
+        "payment": {
+          "status": "initiated",
+          "gateway": "record_only",
+          "amount": 660480
+        }
+      }
+    },
+    {
+      "id": "A45",
+      "feature": "Existing-booking overlap rejected",
+      "result": "PASS",
+      "observed": {
+        "status": 400,
+        "message": "Those dates have just been taken. Please choose another window."
+      }
+    },
+    {
+      "id": "A46",
+      "feature": "Past stay dates rejected",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "A47",
+      "feature": "Booking ownership enforced",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "A48",
+      "feature": "Invoice ownership prevents content disclosure",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "content_denied": true
+      }
+    },
+    {
+      "id": "A49",
+      "feature": "Printable invoice HTML generated",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "content_type": "text/html; charset=utf-8"
+      }
+    },
+    {
+      "id": "A50",
+      "feature": "Invoice message reports disabled audit-mail transport",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "message": "Email is disabled on this site — use the printable invoice instead."
+      }
+    },
+    {
+      "id": "A51",
+      "feature": "Host-blocked date is unbookable",
+      "result": "FAIL",
+      "observed": {
+        "accepted_blocked_date": true,
+        "ref": "JL-2026-1040"
+      }
+    },
+    {
+      "id": "A52",
+      "feature": "Calendar prices and seasonal rules reach quote",
+      "result": "FAIL",
+      "observed": {
+        "base_nightly": 155000,
+        "calendar_nightly": 400000,
+        "rule_pct": 50,
+        "quote_nightly": 155000
+      }
+    },
+    {
+      "id": "A53",
+      "feature": "Future unpaid check-in prevented",
+      "result": "FAIL",
+      "observed": {
+        "accepted_early_checkin": true,
+        "booking": {
+          "status": "active",
+          "escrow_status": "released"
+        }
+      }
+    },
+    {
+      "id": "A54",
+      "feature": "Checkout status transition persists",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A55",
+      "feature": "Review submission enters moderation",
+      "result": "PASS",
+      "observed": {
+        "review_id": 37
+      }
+    },
+    {
+      "id": "A56",
+      "feature": "Duplicate web review rejected",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "A57",
+      "feature": "Admin review publication and rating recalculation",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A58",
+      "feature": "Arbitrary gift credit cannot zero a stay",
+      "result": "FAIL",
+      "observed": {
+        "accepted": true,
+        "total": 0
+      }
+    },
+    {
+      "id": "A59",
+      "feature": "Gift-card issuance waits for payment",
+      "result": "FAIL",
+      "observed": {
+        "issued_without_payment": true,
+        "payment_rows_for_giftcard": 0
+      }
+    },
+    {
+      "id": "A60",
+      "feature": "Gift-card balance lookup API",
+      "result": "PASS",
+      "observed": {
+        "balance": 100000
+      }
+    },
+    {
+      "id": "A61",
+      "feature": "Gift-card balance debited on discounted reservation",
+      "result": "FAIL",
+      "observed": {
+        "booking_accepted": true,
+        "remaining_balance": 100000
+      }
+    },
+    {
+      "id": "A62",
+      "feature": "Modification request stored without altering reservation",
+      "result": "PASS",
+      "observed": {
+        "stored_checkin": "2027-09-10",
+        "request_saved": true
+      }
+    },
+    {
+      "id": "A63",
+      "feature": "Cancellation status persists",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A64",
+      "feature": "Points ledger reconciles after cancellation",
+      "result": "FAIL",
+      "observed": {
+        "points": 5180,
+        "ledger_sum": 7980
+      }
+    },
+    {
+      "id": "A65",
+      "feature": "Host can pause approved listing",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A66",
+      "feature": "Paused listing cannot be booked directly",
+      "result": "FAIL",
+      "observed": {
+        "accepted": true,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "A67",
+      "feature": "Campaign metadata saved",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A68",
+      "feature": "Live campaign creates usable promo",
+      "result": "FAIL",
+      "observed": {
+        "campaign_rows": 1,
+        "promo_rows": 0
+      }
+    },
+    {
+      "id": "A69",
+      "feature": "CMS block storage",
+      "result": "PASS",
+      "observed": {
+        "id": 6
+      }
+    },
+    {
+      "id": "A70",
+      "feature": "Published CMS block consumed by public home",
+      "result": "FAIL",
+      "observed": {
+        "marker_on_home": false
+      }
+    },
+    {
+      "id": "A71",
+      "feature": "Admin suspension stores label",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "A72",
+      "feature": "Suspended account cannot sign in",
+      "result": "FAIL",
+      "observed": {
+        "login_accepted": true,
+        "status_level": "warn"
+      }
+    },
+    {
+      "id": "R01",
+      "feature": "Admin CSV bookings",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 5
+      }
+    },
+    {
+      "id": "R02",
+      "feature": "Admin CSV revenue",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 1
+      }
+    },
+    {
+      "id": "R03",
+      "feature": "Admin CSV properties",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 15
+      }
+    },
+    {
+      "id": "R04",
+      "feature": "Admin CSV users",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 7
+      }
+    },
+    {
+      "id": "R05",
+      "feature": "Admin CSV reviews",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 37
+      }
+    },
+    {
+      "id": "R06",
+      "feature": "Admin CSV subscribers",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 1
+      }
+    },
+    {
+      "id": "R07",
+      "feature": "Admin CSV hosts",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 4
+      }
+    },
+    {
+      "id": "R08",
+      "feature": "Admin CSV audit",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "rows": 43
+      }
+    },
+    {
+      "id": "H01",
+      "feature": "Host CSV earnings",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "H02",
+      "feature": "Host CSV payouts",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "M01",
+      "feature": "Mobile bearer-token login",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "M02",
+      "feature": "Mobile catalogue/member sync",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "M03",
+      "feature": "Mobile send message matches schema",
+      "result": "FAIL",
+      "observed": {
+        "status": 500,
+        "json_response": false
+      }
+    },
+    {
+      "id": "M04",
+      "feature": "Mobile notifications read matches schema",
+      "result": "FAIL",
+      "observed": {
+        "status": 500,
+        "json_response": false
+      }
+    },
+    {
+      "id": "M05",
+      "feature": "Mobile review requires own completed/active booking",
+      "result": "FAIL",
+      "observed": {
+        "accepted_unverified_review": true
+      }
+    },
+    {
+      "id": "M06",
+      "feature": "Mobile reservation creation",
+      "result": "PASS",
+      "observed": {
+        "ref": "JL-2026-4513"
+      }
+    },
+    {
+      "id": "M07",
+      "feature": "Mobile booking sequential idempotency",
+      "result": "PASS",
+      "observed": {
+        "replayed": true
+      }
+    },
+    {
+      "id": "M08",
+      "feature": "Guest cannot self-approve pending request via mobile",
+      "result": "FAIL",
+      "observed": {
+        "self_approved": true
+      }
+    },
+    {
+      "id": "M09",
+      "feature": "Mobile offline wishlist replay acts once",
+      "result": "FAIL",
+      "observed": {
+        "before": 1,
+        "after_two_same_key_requests": 1
+      }
+    },
+    {
+      "id": "M10",
+      "feature": "Mobile listing submission",
+      "result": "PASS",
+      "observed": {
+        "slug": "audit-mobile-pending-home-91662"
+      }
+    },
+    {
+      "id": "M11",
+      "feature": "Mobile cannot bypass listing moderation",
+      "result": "FAIL",
+      "observed": {
+        "published_without_review": true
+      }
+    },
+    {
+      "id": "M12",
+      "feature": "Mobile token revocation",
+      "result": "PASS",
+      "observed": {
+        "after_revocation_status": 401
+      }
+    },
+    {
+      "id": "A73",
+      "feature": "Password change and subsequent login",
+      "result": "PASS",
+      "observed": {
+        "changed": true,
+        "new_login": true
+      }
+    },
+    {
+      "id": "A74",
+      "feature": "Profile update API",
+      "result": "PASS",
+      "observed": {
+        "ok": true,
+        "web_edit_form_missing": true
+      }
+    },
+    {
+      "id": "A75",
+      "feature": "Website logout clears authenticated session",
+      "result": "PASS",
+      "observed": {
+        "after_logout": 401
+      }
+    },
+    {
+      "id": "A76",
+      "feature": "Rejecting last published review resets aggregate counts",
+      "result": "FAIL",
+      "observed": {
+        "review_rejected": true,
+        "remaining_published": 0,
+        "stored_aggregate": {
+          "rating": 5.0,
+          "reviews_count": 1
+        }
+      }
+    }
+  ],
+  "module_checks": [
+    {
+      "id": "T01",
+      "feature": "Help page survives unapplied optional support migration",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "T02",
+      "feature": "Chat API reports missing migration without fatal error",
+      "result": "PASS",
+      "observed": {
+        "status": 503,
+        "needsMigration": true
+      }
+    },
+    {
+      "id": "T03",
+      "feature": "Dispute API reports missing migration without fatal error",
+      "result": "PASS",
+      "observed": {
+        "status": 503
+      }
+    },
+    {
+      "id": "T04",
+      "feature": "Anonymous user cannot execute the module migration",
+      "result": "PASS",
+      "observed": {
+        "tables_created": false
+      }
+    },
+    {
+      "id": "T05",
+      "feature": "Admin module migration creates all ten supplied support tables",
+      "result": "PASS",
+      "observed": {
+        "tables_present": [
+          "dispute_categories",
+          "disputes",
+          "dispute_events",
+          "chat_departments",
+          "chat_agents",
+          "chat_agent_departments",
+          "chat_sessions",
+          "chat_messages",
+          "chat_events",
+          "chat_canned"
+        ],
+        "http": 200
+      }
+    },
+    {
+      "id": "T06",
+      "feature": "Supplied SQLite migration path preserves seed uniqueness on rerun",
+      "result": "FAIL",
+      "observed": {
+        "first": {
+          "dispute_categories": 8,
+          "chat_departments": 5,
+          "chat_canned": 7,
+          "chat_agents": 1
+        },
+        "second": {
+          "dispute_categories": 16,
+          "chat_departments": 10,
+          "chat_canned": 14,
+          "chat_agents": 1
+        },
+        "scope": "SQLite path only: translator removes UNIQUE keys and ensure_unique_index attempts MySQL ALTER syntax. No native MySQL rerun failure was established."
+      }
+    },
+    {
+      "id": "T07",
+      "feature": "First migration seeds eight categories, five departments, seven replies and one admin agent",
+      "result": "PASS",
+      "observed": {
+        "first_run": {
+          "dispute_categories": 8,
+          "chat_departments": 5,
+          "chat_canned": 7,
+          "chat_agents": 1
+        }
+      }
+    },
+    {
+      "id": "T08",
+      "feature": "Help payload includes the installed dispute/chat module",
+      "result": "PASS",
+      "observed": {
+        "categories": 16,
+        "chat_present": true,
+        "note": "Duplicate category count is the separately reported SQLite rerun limitation, not a second payload failure."
+      }
+    },
+    {
+      "id": "T09",
+      "feature": "Diagnostic report withholds administrator details from anonymous visitor",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "requires_signin_text": true
+      }
+    },
+    {
+      "id": "T10",
+      "feature": "Authorized diagnostic page runs without HTTP 500",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "C01",
+      "feature": "Chat mutations/read-POSTs reject missing CSRF",
+      "result": "PASS",
+      "observed": {
+        "status": 419
+      }
+    },
+    {
+      "id": "C02",
+      "feature": "Live-chat widget configuration returns five queues",
+      "result": "PASS",
+      "observed": {
+        "queue_count": 5
+      }
+    },
+    {
+      "id": "C03",
+      "feature": "Ordinary member cannot enter agent console API",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "C04",
+      "feature": "Existing member can be linked to a limited chat-agent profile",
+      "result": "PASS",
+      "observed": {
+        "one_user_role": "guest",
+        "agent_id": 2
+      }
+    },
+    {
+      "id": "C05",
+      "feature": "Visitor can start a persisted queued chat when agents are offline",
+      "result": "PASS",
+      "observed": {
+        "status": "queued",
+        "token_length": 40,
+        "persisted_messages": 2
+      }
+    },
+    {
+      "id": "C06",
+      "feature": "Visitor chat message persists",
+      "result": "PASS",
+      "observed": {
+        "http": 200,
+        "stored": true
+      }
+    },
+    {
+      "id": "C07",
+      "feature": "Unrelated visitor cannot read chat transcript",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "C08",
+      "feature": "Unrelated visitor cannot post in a chat",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "C09",
+      "feature": "Limited agent can load authorized console state",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "isAgent": true
+      }
+    },
+    {
+      "id": "C10",
+      "feature": "Queued visitor is auto-routed to a free online matching agent",
+      "result": "PASS",
+      "observed": {
+        "status": "active",
+        "assigned_agent": 2
+      }
+    },
+    {
+      "id": "C11",
+      "feature": "Agent reply reaches visitor through polling",
+      "result": "PASS",
+      "observed": {
+        "agent_post": true,
+        "visitor_received": true
+      }
+    },
+    {
+      "id": "C12",
+      "feature": "Live-chat internal note is absent from visitor transcript",
+      "result": "PASS",
+      "observed": {
+        "note_saved": true,
+        "visitor_saw_note": false
+      }
+    },
+    {
+      "id": "C13",
+      "feature": "Legitimate typing indicator is propagated",
+      "result": "PASS",
+      "observed": {
+        "agentTyping": true
+      }
+    },
+    {
+      "id": "C14",
+      "feature": "Typing updates require ownership of the visitor chat",
+      "result": "FAIL",
+      "observed": {
+        "unauthorized_typing_accepted": true
+      }
+    },
+    {
+      "id": "C15",
+      "feature": "Chat satisfaction cannot be submitted before closure",
+      "result": "FAIL",
+      "observed": {
+        "active_chat_rating_accepted": true
+      }
+    },
+    {
+      "id": "C16",
+      "feature": "Automatic routing respects agent capacity",
+      "result": "PASS",
+      "observed": {
+        "second_chat_status": "queued"
+      }
+    },
+    {
+      "id": "C17",
+      "feature": "Limited agent cannot read another queue and agent transcript",
+      "result": "FAIL",
+      "observed": {
+        "cross_queue_read_accepted": true,
+        "reader_agent": 3,
+        "assigned_agent": 2
+      }
+    },
+    {
+      "id": "C18",
+      "feature": "Another ordinary agent cannot reply as the assigned agent",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "C19",
+      "feature": "Transfer requires supervisor/admin privilege",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "C20",
+      "feature": "Supervisor/admin transfer updates assignment",
+      "result": "PASS",
+      "observed": {
+        "ok": true,
+        "stored_agent": 3
+      }
+    },
+    {
+      "id": "C21",
+      "feature": "Unrelated visitor cannot close another conversation",
+      "result": "FAIL",
+      "observed": {
+        "unauthorized_close_accepted": true,
+        "stored_status": "closed"
+      }
+    },
+    {
+      "id": "C22",
+      "feature": "Closed chat rejects further messages",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "C23",
+      "feature": "Authorized closed-chat rating persists",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "C24",
+      "feature": "Unrelated visitor cannot change another chat rating",
+      "result": "PASS",
+      "observed": {
+        "status": 400,
+        "access_rejected": true,
+        "note": "API uses 400 rather than the service-suggested 403."
+      }
+    },
+    {
+      "id": "C25",
+      "feature": "Visitor token restores own chat history",
+      "result": "PASS",
+      "observed": {
+        "history_count": 1
+      }
+    },
+    {
+      "id": "C26",
+      "feature": "An available agent can claim a queued chat",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "C27",
+      "feature": "Admin can create a saved chat reply",
+      "result": "PASS",
+      "observed": {
+        "id": 8
+      }
+    },
+    {
+      "id": "C28",
+      "feature": "Using a canned reply substitutes agent and saves a message",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "C29",
+      "feature": "Incomplete saved-reply edit is rejected without changing its body",
+      "result": "PASS",
+      "observed": {
+        "rejected": true,
+        "stored": {
+          "title": "Audit reply",
+          "body": "Welcome from {agent}.",
+          "shortcut": "audit"
+        }
+      }
+    },
+    {
+      "id": "C30",
+      "feature": "Partial agent edit preserves omitted capacity and role",
+      "result": "FAIL",
+      "observed": {
+        "stored": {
+          "max_chats": 3,
+          "agent_role": "agent",
+          "department_id": 1
+        }
+      }
+    },
+    {
+      "id": "C31",
+      "feature": "Department form values persist when saved",
+      "result": "PASS",
+      "observed": {
+        "stored": {
+          "routing": "fewest",
+          "business_hours": "24/7"
+        }
+      }
+    },
+    {
+      "id": "C32",
+      "feature": "Creating a normal agent with a password does not grant platform admin",
+      "result": "FAIL",
+      "observed": {
+        "created": true,
+        "requested_agent_role": "agent",
+        "actual_user_role": "admin"
+      }
+    },
+    {
+      "id": "C33",
+      "feature": "Normal newly provisioned chat agent cannot export every platform user",
+      "result": "FAIL",
+      "observed": {
+        "user_export_status": 200,
+        "csv_returned": true
+      }
+    },
+    {
+      "id": "C34",
+      "feature": "Pausing newly provisioned staff revokes chat access",
+      "result": "FAIL",
+      "observed": {
+        "pause_saved": true,
+        "console_still_accepted": true,
+        "platform_admin_role_remains": "admin"
+      }
+    },
+    {
+      "id": "C35",
+      "feature": "Assigned agent can close the second chat",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "C36",
+      "feature": "Support metrics query real session data",
+      "result": "PASS",
+      "observed": {
+        "status": 200,
+        "metric_keys": [
+          "queued",
+          "active",
+          "online",
+          "today",
+          "closed",
+          "abandoned",
+          "avgWait",
+          "avgWaitSecs",
+          "avgFirst",
+          "avgFirstSecs",
+          "avgDuration",
+          "rating",
+          "rated",
+          "byDept",
+          "live"
+        ]
+      }
+    },
+    {
+      "id": "C37",
+      "feature": "Global live-chat disable prevents new sessions",
+      "result": "PASS",
+      "observed": {
+        "settings_saved": true,
+        "start_rejected": true
+      }
+    },
+    {
+      "id": "D01",
+      "feature": "Dispute intake rejects insufficient description",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "D02",
+      "feature": "Signed-in person cannot file against another guest booking",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "D03",
+      "feature": "Guest booking-linked dispute creates case and timeline",
+      "result": "PASS",
+      "observed": {
+        "ref": "D-2026-9003",
+        "token_length": 40,
+        "status": "submitted"
+      }
+    },
+    {
+      "id": "D04",
+      "feature": "Claimant sees own case in Help case list",
+      "result": "PASS",
+      "observed": {
+        "case_list_contains_ref": true
+      }
+    },
+    {
+      "id": "D05",
+      "feature": "The linked property host can view counterparty case",
+      "result": "PASS",
+      "observed": {
+        "role": "host"
+      }
+    },
+    {
+      "id": "D06",
+      "feature": "Unrelated guest cannot read case file",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "D07",
+      "feature": "Wrong guest token cannot read case file",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "D08",
+      "feature": "Claimant message reaches persistent case timeline",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "D09",
+      "feature": "Dispute evidence links are stored and returned",
+      "result": "PASS",
+      "observed": {
+        "link_saved": true,
+        "binary_upload_implemented": false
+      }
+    },
+    {
+      "id": "D10",
+      "feature": "Dispute evidence restricts unsafe URL schemes",
+      "result": "FAIL",
+      "observed": {
+        "unsafe_scheme_accepted": true,
+        "no_link_clicked": true
+      }
+    },
+    {
+      "id": "D11",
+      "feature": "Claimant cannot create staff-only notes",
+      "result": "PASS",
+      "observed": {
+        "status": 400
+      }
+    },
+    {
+      "id": "D12",
+      "feature": "Claimant cannot decide own dispute",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "D13",
+      "feature": "Admin mediator can claim and advance submitted case",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "D14",
+      "feature": "Mediation status workflow persists permitted transitions",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "D15",
+      "feature": "Case timeline hides internal notes from claimant",
+      "result": "PASS",
+      "observed": {
+        "hidden_from_timeline": true
+      }
+    },
+    {
+      "id": "D16",
+      "feature": "Internal mediation note cannot leak into claimant notifications",
+      "result": "FAIL",
+      "observed": {
+        "leaked_notifications": 1,
+        "note_body_present": true
+      }
+    },
+    {
+      "id": "D17",
+      "feature": "Only claimant can withdraw a case, not the counterparty host",
+      "result": "FAIL",
+      "observed": {
+        "host_withdrawal_accepted": true,
+        "stored_status": "withdrawn"
+      }
+    },
+    {
+      "id": "D18",
+      "feature": "Resolving a withdrawn case requires a valid reopened workflow",
+      "result": "FAIL",
+      "observed": {
+        "accepted_while_withdrawn": true,
+        "status": "resolved"
+      }
+    },
+    {
+      "id": "D19",
+      "feature": "Dispute decision has a traceable local refund record",
+      "result": "PASS",
+      "observed": {
+        "refund_rows": [
+          {
+            "status": "refunded",
+            "gateway": "dispute",
+            "amount": 50000
+          }
+        ],
+        "provider_contacted": false
+      }
+    },
+    {
+      "id": "D20",
+      "feature": "Dispute refund is backed by a provider rather than record-only gateway",
+      "result": "FAIL",
+      "observed": {
+        "gateway": "dispute",
+        "status_label": "refunded",
+        "money_movement_code": "No provider integration exists; tested record-only mutation and corroborated in source."
+      }
+    },
+    {
+      "id": "D21",
+      "feature": "Refund decision creates a real rule-based fraud/trust flag",
+      "result": "PASS",
+      "observed": {
+        "flag_rows": 1,
+        "not_an_ai_model": true
+      }
+    },
+    {
+      "id": "D22",
+      "feature": "Claimant can rate decided case",
+      "result": "PASS",
+      "observed": {
+        "ok": true
+      }
+    },
+    {
+      "id": "D23",
+      "feature": "Counterparty cannot overwrite claimant satisfaction",
+      "result": "FAIL",
+      "observed": {
+        "host_rating_accepted": true,
+        "stored_satisfaction": 1
+      }
+    },
+    {
+      "id": "D24",
+      "feature": "Repeated financial decision is safely idempotent or rejected before mutation",
+      "result": "FAIL",
+      "observed": {
+        "status": 500,
+        "case_changed_despite_response_failure": true
+      }
+    },
+    {
+      "id": "D25",
+      "feature": "Signed-out visitor can file and receive private access token",
+      "result": "PASS",
+      "observed": {
+        "ref": "D-2026-9321",
+        "sla_hours": 4,
+        "token_length": 40
+      }
+    },
+    {
+      "id": "D26",
+      "feature": "Valid private dispute token restores case access",
+      "result": "PASS",
+      "observed": {
+        "role": "guest"
+      }
+    },
+    {
+      "id": "D27",
+      "feature": "Admin dispute queue searches real cases",
+      "result": "PASS",
+      "observed": {
+        "matching_cases": 2
+      }
+    },
+    {
+      "id": "D28",
+      "feature": "Ordinary account cannot read mediation queue",
+      "result": "PASS",
+      "observed": {
+        "status": 403
+      }
+    },
+    {
+      "id": "D29",
+      "feature": "A non-admin linked chat agent does not gain mediation staff access",
+      "result": "PASS",
+      "observed": {
+        "status": 403,
+        "note": "Mediation is admin-only in this implementation, even though agent workspace includes a mediation tab."
+      }
+    },
+    {
+      "id": "D30",
+      "feature": "Full dispute refund consistently reconciles booking/inventory state",
+      "result": "FAIL",
+      "observed": {
+        "decision_ok": true,
+        "booking": {
+          "status": "pending",
+          "escrow_status": "refunded",
+          "total": 376035
+        }
+      }
+    },
+    {
+      "id": "D31",
+      "feature": "Multiple dispute decisions cannot exceed the original booking total",
+      "result": "FAIL",
+      "observed": {
+        "original_total": 376035,
+        "sum_of_dispute_refund_rows": 476035
+      }
+    },
+    {
+      "id": "D32",
+      "feature": "Anonymous public support stats do not disclose private case metadata",
+      "result": "FAIL",
+      "observed": {
+        "public_recent_case_count": 1,
+        "discloses_subject_and_reference": true
+      }
+    },
+    {
+      "id": "T11",
+      "feature": "Help degrades gracefully when an optional support table is missing",
+      "result": "PASS",
+      "observed": {
+        "status": 200
+      }
+    },
+    {
+      "id": "T12",
+      "feature": "Agent page also handles an incomplete migration without fatal 500",
+      "result": "FAIL",
+      "observed": {
+        "status": 500
+      }
+    },
+    {
+      "id": "C38",
+      "feature": "Disabled saved reply cannot be sent to a visitor",
+      "result": "FAIL",
+      "observed": {
+        "disabled_reply_sent": true,
+        "stored_active": 0
+      }
+    },
+    {
+      "id": "C39",
+      "feature": "Personal saved reply is scoped to its intended agent",
+      "result": "FAIL",
+      "observed": {
+        "another_agent_received_personal_reply": true
+      }
+    },
+    {
+      "id": "C40",
+      "feature": "Failed agent validation does not persist a partial account record",
+      "result": "FAIL",
+      "observed": {
+        "response_ok": false,
+        "record_created_despite_error": true
+      }
+    },
+    {
+      "id": "D33",
+      "feature": "Opening a dispute sends an in-app alert to mediation staff",
+      "result": "FAIL",
+      "observed": {
+        "staff_alert_rows": 0,
+        "case_saved": true
+      }
+    },
+    {
+      "id": "D34",
+      "feature": "No-action decision cannot also issue a refund record",
+      "result": "FAIL",
+      "observed": {
+        "accepted": true,
+        "stored": {
+          "status": "rejected",
+          "refund_amount": 25000
+        },
+        "refund_rows": 1
+      }
+    },
+    {
+      "id": "T13",
+      "feature": "Failure-trap follows the selected page access policy",
+      "result": "PASS",
+      "observed": {
+        "anonymous_http_status": 200,
+        "filesystem_path_exposed": false,
+        "target": "help.php",
+        "note": "Public Help is intentionally probeable without sign-in; restricted targets enforce their own authentication. Restrict/remove diagnostic tooling for deployment hardening; this did not prove production data exposure."
+      }
+    },
+    {
+      "id": "C41",
+      "feature": "Visitor close endpoint must not disclose another visitor transcript",
+      "result": "FAIL",
+      "observed": {
+        "unauthorized_close_accepted": true,
+        "private_transcript_returned": true,
+        "message_count_returned": 3,
+        "synthetic_conversation_only": true
+      }
+    }
+  ],
+  "browser_checks": [
+    {
+      "id": "GATE-account.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "account.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-trips.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "trips.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-payments.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "payments.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-messages.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "messages.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-notifications.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "notifications.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-wishlist.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "wishlist.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-compare.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "compare.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-host-onboarding.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "host-onboarding.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-host-dashboard.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "host-dashboard.php",
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "GATE-admin.php",
+      "feature": "Unauthenticated protected route redirects to sign-in",
+      "result": "PASS",
+      "observed": {
+        "path": "admin.php",
+        "destination": "/admin-login.php"
+      }
+    },
+    {
+      "id": "B01",
+      "feature": "Email sign-in through actual form",
+      "result": "PASS",
+      "observed": {
+        "destination": "/account.php"
+      }
+    },
+    {
+      "id": "B02",
+      "feature": "Basic area/guest filtering and price sorting",
+      "result": "FAIL",
+      "observed": {
+        "count": 12,
+        "prices": [
+          95000,
+          120000,
+          135000,
+          145000,
+          150000,
+          155000,
+          165000,
+          175000,
+          185000,
+          210000,
+          240000,
+          420000
+        ]
+      }
+    },
+    {
+      "id": "B03",
+      "feature": "Availability filter excludes reserved dates",
+      "result": "FAIL",
+      "observed": {
+        "reserved_property_still_in_results": true
+      }
+    },
+    {
+      "id": "B04",
+      "feature": "Collection link restricts results to its members",
+      "result": "FAIL",
+      "observed": {
+        "expected": [
+          "ocean-spearl",
+          "villa-azur",
+          "lagoon-villa"
+        ],
+        "actual": [
+          "onyx",
+          "the-favored-court",
+          "audit-lakeside-residence",
+          "audit-mobile-pending-home-91662",
+          "ocean-spearl",
+          "villa-azur",
+          "sky-garden",
+          "maitama",
+          "atelier-loft",
+          "heritage-house",
+          "lagoon-villa",
+          "lagoon-duplex",
+          "eko-icon",
+          "abuja-sky",
+          "island-retreat"
+        ]
+      }
+    },
+    {
+      "id": "B05",
+      "feature": "Stays category tabs avoid JavaScript exceptions",
+      "result": "FAIL",
+      "observed": {
+        "errors": [
+          "Cannot read properties of null (reading 'scrollIntoView')"
+        ]
+      }
+    },
+    {
+      "id": "B06",
+      "feature": "Map page opens map view",
+      "result": "FAIL",
+      "observed": {
+        "map_visible": false
+      }
+    },
+    {
+      "id": "B07",
+      "feature": "Map includes all newly published properties",
+      "result": "FAIL",
+      "observed": {
+        "pin_count": 12,
+        "missing_test_listing": true
+      }
+    },
+    {
+      "id": "B08",
+      "feature": "Stay selection survives navigation to checkout",
+      "result": "FAIL",
+      "observed": {
+        "in": "2026-09-29",
+        "out": "2026-10-02",
+        "policy": "moderate"
+      }
+    },
+    {
+      "id": "B09",
+      "feature": "Booking wizard date edits work after stepping back",
+      "result": "FAIL",
+      "observed": {
+        "in": "2027-04-10",
+        "out": "2027-04-13",
+        "visibleIn": "2027-04-20"
+      }
+    },
+    {
+      "id": "B10",
+      "feature": "Gift-card code is actually validated in checkout UI",
+      "result": "FAIL",
+      "observed": {
+        "credit": 60000,
+        "api_calls": []
+      }
+    },
+    {
+      "id": "B11",
+      "feature": "Promo estimate matches authoritative PHP quote",
+      "result": "FAIL",
+      "observed": {
+        "browser_total": 594432,
+        "server_total": 604980,
+        "difference": 10548
+      }
+    },
+    {
+      "id": "B12",
+      "feature": "Default wishlist toggle immediately reflects saved state",
+      "result": "PASS",
+      "observed": {
+        "saved": true,
+        "toast": "Removed from wishlist"
+      }
+    },
+    {
+      "id": "B13",
+      "feature": "Creating a named wishlist updates page without reload",
+      "result": "FAIL",
+      "observed": {
+        "active": "Audit Crew",
+        "lists": [
+          "default",
+          "december-trip"
+        ]
+      }
+    },
+    {
+      "id": "B14",
+      "feature": "Compare updates on click without reload",
+      "result": "FAIL",
+      "observed": {
+        "before": 1,
+        "after": 1,
+        "server_count": 2
+      }
+    },
+    {
+      "id": "B15",
+      "feature": "Trip action refreshes displayed status without reload",
+      "result": "FAIL",
+      "observed": {
+        "display": "confirmed",
+        "actual": "active"
+      }
+    },
+    {
+      "id": "B16",
+      "feature": "Notification mark-all updates UI and database",
+      "result": "PASS",
+      "observed": {
+        "unread": 0
+      }
+    },
+    {
+      "id": "B17",
+      "feature": "Legacy listing Message CTA opens intended host conversation",
+      "result": "FAIL",
+      "observed": {
+        "requested": "team-onyx",
+        "actual": "concierge",
+        "available": [
+          "concierge",
+          "support"
+        ]
+      }
+    },
+    {
+      "id": "B18",
+      "feature": "Stored chat text remains text instead of HTML",
+      "result": "FAIL",
+      "observed": {
+        "raw_html_rendered": true
+      }
+    },
+    {
+      "id": "B19",
+      "feature": "Currency preference persists after reload",
+      "result": "PASS",
+      "observed": {
+        "currency": "USD",
+        "formatted": "$65"
+      }
+    },
+    {
+      "id": "B20",
+      "feature": "Theme preference persists after reload",
+      "result": "PASS",
+      "observed": {
+        "before": "dark",
+        "after": "light"
+      }
+    },
+    {
+      "id": "B21",
+      "feature": "FAQ search and accordion",
+      "result": "PASS",
+      "observed": {
+        "matches": 1
+      }
+    },
+    {
+      "id": "B22",
+      "feature": "Corporate demo submission reaches backend",
+      "result": "FAIL",
+      "observed": {
+        "api_calls": []
+      }
+    },
+    {
+      "id": "B23",
+      "feature": "Journal top Subscribe actually subscribes",
+      "result": "FAIL",
+      "observed": {
+        "api_calls": []
+      }
+    },
+    {
+      "id": "B24",
+      "feature": "Membership Redeem reaches backend",
+      "result": "FAIL",
+      "observed": {
+        "api_calls": []
+      }
+    },
+    {
+      "id": "B25",
+      "feature": "Referral centre shows current account code",
+      "result": "FAIL",
+      "observed": {
+        "current_code_present": false,
+        "sample_code_present": true
+      }
+    },
+    {
+      "id": "B26",
+      "feature": "App Store button is a real distribution link",
+      "result": "FAIL",
+      "observed": {
+        "tag": "BUTTON",
+        "onclick": "toast('iPhone demo build — coming to TestFlight','phone')",
+        "href": null
+      }
+    },
+    {
+      "id": "B27",
+      "feature": "Emergency controls initiate a call rather than toast",
+      "result": "FAIL",
+      "observed": {
+        "tag": "BUTTON",
+        "onclick": "toast('Dialling 112…','phone')",
+        "href": null
+      }
+    },
+    {
+      "id": "B28",
+      "feature": "Host listing wizard retains selected city/type/policy",
+      "result": "FAIL",
+      "observed": {
+        "sent_city": "Lagos",
+        "sent_type": "Apartment",
+        "sent_policy": "moderate",
+        "photos": [
+          "audit-photo.jpg"
+        ]
+      }
+    },
+    {
+      "id": "B29",
+      "feature": "Host photo uploader actually persists file content",
+      "result": "FAIL",
+      "observed": {
+        "stored_paths": [
+          "audit-photo.jpg"
+        ],
+        "photo_status": 404,
+        "file_uploaded": false
+      }
+    },
+    {
+      "id": "B30",
+      "feature": "Host wizard save-and-continue survives refresh",
+      "result": "FAIL",
+      "observed": {
+        "restored_title": "",
+        "step": 0
+      }
+    },
+    {
+      "id": "B31",
+      "feature": "Host calendar month navigation",
+      "result": "PASS",
+      "observed": {
+        "before": "September 2026",
+        "after": "October 2026"
+      }
+    },
+    {
+      "id": "B32",
+      "feature": "Owner can edit and persist a message template",
+      "result": "PASS",
+      "observed": {
+        "updated_in_page": true
+      }
+    },
+    {
+      "id": "B33",
+      "feature": "Admin user search filters loaded users",
+      "result": "PASS",
+      "observed": {
+        "found_owner": true,
+        "excluded_other": true
+      }
+    },
+    {
+      "id": "B34",
+      "feature": "Campaign editor loads saved record",
+      "result": "PASS",
+      "observed": {
+        "code_loaded": true
+      }
+    },
+    {
+      "id": "B35",
+      "feature": "CMS editor loads stored body",
+      "result": "PASS",
+      "observed": {
+        "body_loaded": true
+      }
+    },
+    {
+      "id": "B36",
+      "feature": "Mobile menu opens and navigates",
+      "result": "PASS",
+      "observed": {
+        "opened": true
+      }
+    },
+    {
+      "id": "RESP-home",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "RESP-stays.php",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "stays.php",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "RESP-stay.php?p=onyx",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "stay.php?p=onyx",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "RESP-collections.php",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "collections.php",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "RESP-experiences.php",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "experiences.php",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "RESP-auth.php?mode=register",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "auth.php?mode=register",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "RESP-help.php",
+      "feature": "390px layout does not overflow horizontally",
+      "result": "PASS",
+      "observed": {
+        "path": "help.php",
+        "viewport": 390,
+        "scroll": 390
+      }
+    },
+    {
+      "id": "U01",
+      "feature": "Floating button opens real live-chat widget",
+      "result": "PASS",
+      "observed": {
+        "queue_buttons": 5
+      }
+    },
+    {
+      "id": "U02",
+      "feature": "Visitor starts real live-chat conversation through form",
+      "result": "PASS",
+      "observed": {
+        "ref": "C-260922-136",
+        "status": "active"
+      }
+    },
+    {
+      "id": "U03",
+      "feature": "New chat widget renders user text safely",
+      "result": "PASS",
+      "observed": {
+        "raw_html_elements": 0,
+        "markup_visible_as_text": true
+      }
+    },
+    {
+      "id": "U04",
+      "feature": "Visitor draft survives normal four-second polling",
+      "result": "FAIL",
+      "observed": {
+        "draft_after_poll": ""
+      }
+    },
+    {
+      "id": "U05",
+      "feature": "Linked non-admin agent loads and opens assigned chat UI",
+      "result": "PASS",
+      "observed": {
+        "role": "agent",
+        "userRole": "guest",
+        "ref": "C-260922-136"
+      }
+    },
+    {
+      "id": "U06",
+      "feature": "Agent UI sends a reply that visitor actually receives",
+      "result": "PASS",
+      "observed": {
+        "visitor_received_reply": true
+      }
+    },
+    {
+      "id": "U07",
+      "feature": "Agent draft survives normal six-second console refresh",
+      "result": "FAIL",
+      "observed": {
+        "draft_after_refresh": ""
+      }
+    },
+    {
+      "id": "U08",
+      "feature": "Agent note button keeps note out of visitor UI",
+      "result": "PASS",
+      "observed": {
+        "visitor_saw_internal_note": false
+      }
+    },
+    {
+      "id": "U09",
+      "feature": "Returning visitor resumes the same chat after page reload",
+      "result": "PASS",
+      "observed": {
+        "same_ref": true
+      }
+    },
+    {
+      "id": "U10",
+      "feature": "Agent close action and visitor satisfaction work through UI",
+      "result": "PASS",
+      "observed": {
+        "status": "closed",
+        "rating": 4
+      }
+    },
+    {
+      "id": "U11",
+      "feature": "Help File a dispute control opens a real category form",
+      "result": "PASS",
+      "observed": {
+        "categories": 8
+      }
+    },
+    {
+      "id": "U12",
+      "feature": "Dispute creation form persists a case and shows its reference",
+      "result": "PASS",
+      "observed": {
+        "ref": "D-2026-5639",
+        "confirmation_visible": true
+      }
+    },
+    {
+      "id": "U13",
+      "feature": "Case file opens and guest can post safely rendered text",
+      "result": "PASS",
+      "observed": {
+        "message_saved": true,
+        "raw_html_elements": 0
+      }
+    },
+    {
+      "id": "U14",
+      "feature": "Case evidence button saves an actual evidence link",
+      "result": "PASS",
+      "observed": {
+        "binary_upload": false,
+        "link_persisted": true,
+        "no_link_fetched": true
+      }
+    },
+    {
+      "id": "U15",
+      "feature": "New case appears in member case list without a manual reload",
+      "result": "FAIL",
+      "observed": {
+        "new_ref_visible": false
+      }
+    },
+    {
+      "id": "U16",
+      "feature": "Admin mediation tab loads and opens a real case",
+      "result": "PASS",
+      "observed": {
+        "role": "staff"
+      }
+    },
+    {
+      "id": "U17",
+      "feature": "Admin can claim a dispute through its case UI",
+      "result": "PASS",
+      "observed": {
+        "stored_status": "under_review"
+      }
+    },
+    {
+      "id": "U18",
+      "feature": "Mediator can record and display a non-financial decision through UI",
+      "result": "PASS",
+      "observed": {
+        "status": "resolved",
+        "provider_refund": false
+      }
+    },
+    {
+      "id": "U19",
+      "feature": "The button labelled Reopen actually reopens a decided case",
+      "result": "FAIL",
+      "observed": {
+        "api_ok": false,
+        "message": "Use the decision form to resolve a case — it records the outcome and any refund.",
+        "stored_status": "resolved"
+      }
+    },
+    {
+      "id": "U20",
+      "feature": "Admin chat Widget settings button displays editable settings",
+      "result": "FAIL",
+      "observed": {
+        "settings_form_controls": 0,
+        "agent_body_present": 0
+      }
+    },
+    {
+      "id": "U21",
+      "feature": "Anonymous browser can file and open a case on the same device",
+      "result": "PASS",
+      "observed": {
+        "opened": true,
+        "link_contains_token": false
+      }
+    },
+    {
+      "id": "U22",
+      "feature": "Copied private case link works for an anonymous visitor on another device",
+      "result": "FAIL",
+      "observed": {
+        "status": 403,
+        "access_granted": false,
+        "token_in_copied_link": false
+      }
+    },
+    {
+      "id": "U25",
+      "feature": "Unauthenticated agent page requires sign-in",
+      "result": "PASS",
+      "observed": {
+        "destination": "/auth.php"
+      }
+    },
+    {
+      "id": "U26",
+      "feature": "Ordinary member receives clear agent-access denial UI",
+      "result": "PASS",
+      "observed": {
+        "message": "Agent access needed"
+      }
+    },
+    {
+      "id": "B37",
+      "feature": "Full browser checkout persists requested dates and confirmation",
+      "result": "PASS",
+      "observed": {
+        "ref": "JL-2026-3199",
+        "checkin": "2028-02-10",
+        "checkout": "2028-02-13",
+        "total": 660480,
+        "status": "confirmed",
+        "external_payments_contacted": false
+      }
+    },
+    {
+      "id": "B38",
+      "feature": "Excess occupancy rejected rather than silently reduced",
+      "result": "FAIL",
+      "observed": {
+        "accepted": true,
+        "stored": {
+          "guests": 6,
+          "policy": "flexible",
+          "split_payment": 1,
+          "nights": 3
+        }
+      }
+    },
+    {
+      "id": "B39",
+      "feature": "Short stay cannot request long-stay-only split payment",
+      "result": "FAIL",
+      "observed": {
+        "accepted": true,
+        "nights": 3,
+        "split": 1
+      }
+    },
+    {
+      "id": "B40",
+      "feature": "Exact-city and ascending-price filter logic",
+      "result": "PASS",
+      "observed": {
+        "results": [
+          {
+            "city": "Abuja",
+            "price": 150000
+          },
+          {
+            "city": "Abuja",
+            "price": 165000
+          },
+          {
+            "city": "Abuja",
+            "price": 190000
+          }
+        ]
+      }
+    },
+    {
+      "id": "U23",
+      "feature": "Live-chat widget fits a 390px mobile viewport",
+      "result": "PASS",
+      "observed": {
+        "viewport": 390,
+        "scroll": 390,
+        "widget": 358.67999267578125
+      }
+    },
+    {
+      "id": "U24",
+      "feature": "Dispute form fits a 390px mobile viewport",
+      "result": "PASS",
+      "observed": {
+        "viewport": 390,
+        "scroll": 390,
+        "modal": 378.300048828125
+      }
+    },
+    {
+      "id": "U27",
+      "feature": "Visitor End chat updates the widget to a closed state",
+      "result": "PASS",
+      "observed": {
+        "database_status": "closed",
+        "mode": "rate",
+        "bundle_status": "closed",
+        "composer_still_present": false,
+        "claims_connected": false
+      }
+    }
+  ],
+  "route_checks": [
+    {
+      "path": "",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Exclusive residences,crafted for the extraordinary"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stays.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Collection"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "map.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Collection"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "collections.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Curated collections"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhoods.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Neighbourhood guides"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "experiences.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Experiences, arranged for you"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "reviews.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Loved by thousands"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Journal"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "help.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "How can we help?"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "membership.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Jollof Club"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "giftcards.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Jollof Living gift cards"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "referral.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Give ₦10,000, get ₦10,000"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "business.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Jollof Living for Business"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "about.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Luxury living, African soul"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "app.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The app"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "future.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The future of Jollof Living"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "concierge.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Meet Jollof"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Host with Jollof Living"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "auth.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Sign in to Jollof Living"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "auth.php?mode=register",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Create your account"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin-login.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Back office sign in"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "404.php",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "This address doesn't exist — yet"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=onyx",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Onyx Penthouse"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=the-favored-court",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "This address doesn't exist — yet"
+      ],
+      "errors": [
+        "TypeError: Cannot convert undefined or null to object\n    at Object.entries (<anonymous>)\n    at pStay (http://127.0.0.1:8081/assets/js/site.js?v=246873:1026:24)\n    at stay (http://127.0.0.1:8081/assets/js/site.js?v=246873:4071:37)\n    at render (http://127.0.0.1:8081/assets/js/site.js?v=246873:4090:15)\n    at http://127.0.0.1:8081/assets/js/site.js?v=246873:4209:1"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "path": "stay.php?p=audit-lakeside-residence",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "This address doesn't exist — yet"
+      ],
+      "errors": [
+        "TypeError: Cannot convert undefined or null to object\n    at Object.entries (<anonymous>)\n    at pStay (http://127.0.0.1:8081/assets/js/site.js?v=246873:1026:24)\n    at stay (http://127.0.0.1:8081/assets/js/site.js?v=246873:4071:37)\n    at render (http://127.0.0.1:8081/assets/js/site.js?v=246873:4090:15)\n    at http://127.0.0.1:8081/assets/js/site.js?v=246873:4209:1"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "path": "stay.php?p=audit-mobile-pending-home-91662",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "This address doesn't exist — yet"
+      ],
+      "errors": [
+        "TypeError: Cannot convert undefined or null to object\n    at Object.entries (<anonymous>)\n    at pStay (http://127.0.0.1:8081/assets/js/site.js?v=246873:1026:24)\n    at stay (http://127.0.0.1:8081/assets/js/site.js?v=246873:4071:37)\n    at render (http://127.0.0.1:8081/assets/js/site.js?v=246873:4090:15)\n    at http://127.0.0.1:8081/assets/js/site.js?v=246873:4209:1"
+      ],
+      "result": "FAIL"
+    },
+    {
+      "path": "stay.php?p=ocean-spearl",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Ocean Pearl Suite"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=villa-azur",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Villa Azur"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=sky-garden",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Sky Garden Terrace"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=maitama",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Maitama Executive Residence"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=atelier-loft",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Atelier Loft"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=heritage-house",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Heritage House Lagos"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=lagoon-villa",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Lagoon Villa"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=lagoon-duplex",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Lekki Lagoon Duplex"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=eko-icon",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Eko Icon Suite"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=abuja-sky",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Abuja Sky Residence"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=island-retreat",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Island Retreat"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhood.php?n=victoria-island",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Victoria Island"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhood.php?n=ikoyi",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Ikoyi"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhood.php?n=lekki",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Lekki Phase 1"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhood.php?n=banana",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Banana Island"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhood.php?n=eko-atlantic",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Eko Atlantic"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "neighborhood.php?n=maitama",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Maitama, Abuja"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=top-10-stays-lagos",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Top 10 Stays in Lagos Right Now"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=jollof-100",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Legend of Jollof, Explained Over One Plate"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=guidetodettydecember",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "The Insider's Guide to Detty December"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=work-from-lagos",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Working From Lagos: The Executive Playbook"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=longstay-guide",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "Six Weeks in Lagoon Living: A Long-Stay Diary"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=escrow-explained",
+      "role": "anonymous",
+      "http": 200,
+      "headings": [
+        "How Escrow Makes Luxury Stays Safe"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "stay.php?p=no-such-residence",
+      "role": "anonymous",
+      "http": 404,
+      "headings": [
+        "This address doesn't exist — yet"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "blog-post.php?s=no-such-post",
+      "role": "anonymous",
+      "http": 404,
+      "headings": [
+        "This address doesn't exist — yet"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "account.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Your account"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "trips.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "My trips"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "payments.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Payments"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "payments.php?tab=earnings",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Payments"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "payments.php?tab=tax",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Payments"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "payments.php?tab=methods",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Payments"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "messages.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Inbox"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "notifications.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Notifications"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "wishlist.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "My wishlist"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "compare.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Compare residences"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-onboarding.php",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Create your listing"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "booking.php?p=onyx",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "Complete your reservation"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "confirm.php?ref=JL-2026-4674",
+      "role": "guest",
+      "http": 200,
+      "headings": [
+        "See you in Lagos, soon."
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=overview",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=calendar",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=listings",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=analytics",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=revenue",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=ai",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=team",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=templates",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=channels",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "host-dashboard.php?tab=payouts",
+      "role": "owner",
+      "http": 200,
+      "headings": [
+        "Owner dashboard"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=dashboard",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=moderation",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=users",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=promotions",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=fraud",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=chat",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=disputes",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=cms",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=reports",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=roles",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "admin.php?tab=audit",
+      "role": "admin",
+      "http": 200,
+      "headings": [
+        "Back office"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=live",
+      "role": "linked-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=agents",
+      "role": "linked-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=queues",
+      "role": "linked-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=replies",
+      "role": "linked-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=settings",
+      "role": "linked-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=disputes",
+      "role": "linked-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=live",
+      "role": "admin-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=agents",
+      "role": "admin-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=queues",
+      "role": "admin-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=replies",
+      "role": "admin-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=settings",
+      "role": "admin-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    },
+    {
+      "path": "agent.php?tab=disputes",
+      "role": "admin-agent",
+      "http": 200,
+      "headings": [
+        "Chat desk"
+      ],
+      "errors": [],
+      "result": "PASS"
+    }
+  ],
+  "accessibility_scans": [
+    {
+      "path": "",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 30
+        },
+        {
+          "id": "image-alt",
+          "impact": "critical",
+          "description": "Ensure <img> elements have alternative text or a role of none or presentation",
+          "affected_elements": 1
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "description": "Ensure every form element has a label",
+          "affected_elements": 4
+        },
+        {
+          "id": "select-name",
+          "impact": "critical",
+          "description": "Ensure select element has an accessible name",
+          "affected_elements": 2
+        }
+      ],
+      "passes": 27
+    },
+    {
+      "path": "auth.php?mode=register",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 28
+        },
+        {
+          "id": "link-in-text-block",
+          "impact": "serious",
+          "description": "Ensure links are distinguished from surrounding text in a way that does not rely on color",
+          "affected_elements": 1
+        }
+      ],
+      "passes": 26
+    },
+    {
+      "path": "stays.php",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 57
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "description": "Ensure every form element has a label",
+          "affected_elements": 3
+        },
+        {
+          "id": "select-name",
+          "impact": "critical",
+          "description": "Ensure select element has an accessible name",
+          "affected_elements": 5
+        }
+      ],
+      "passes": 24
+    },
+    {
+      "path": "help.php",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 40
+        }
+      ],
+      "passes": 24
+    },
+    {
+      "path": "index.php#live-chat-widget-open",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 37
+        },
+        {
+          "id": "image-alt",
+          "impact": "critical",
+          "description": "Ensure <img> elements have alternative text or a role of none or presentation",
+          "affected_elements": 1
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "description": "Ensure every form element has a label",
+          "affected_elements": 4
+        },
+        {
+          "id": "select-name",
+          "impact": "critical",
+          "description": "Ensure select element has an accessible name",
+          "affected_elements": 2
+        }
+      ],
+      "passes": 28
+    },
+    {
+      "path": "help.php#dispute-form-open",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 63
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "description": "Ensure every form element has a label",
+          "affected_elements": 2
+        },
+        {
+          "id": "select-name",
+          "impact": "critical",
+          "description": "Ensure select element has an accessible name",
+          "affected_elements": 1
+        }
+      ],
+      "passes": 25
+    },
+    {
+      "path": "booking.php?p=onyx",
+      "violations": [
+        {
+          "id": "button-name",
+          "impact": "critical",
+          "description": "Ensure buttons have discernible text",
+          "affected_elements": 2
+        },
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 36
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "description": "Ensure every form element has a label",
+          "affected_elements": 2
+        }
+      ],
+      "passes": 23
+    },
+    {
+      "path": "agent.php#admin-workspace",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "affected_elements": 25
+        },
+        {
+          "id": "scrollable-region-focusable",
+          "impact": "serious",
+          "description": "Ensure elements that have scrollable content are accessible by keyboard in Safari",
+          "affected_elements": 1
+        }
+      ],
+      "passes": 24
+    }
+  ],
+  "seo_probes": "unchanged from the previous audit (core files byte-identical; see limitations)",
+  "limitations": [
+    "No production configuration was executed; the tracked config blob is byte-identical to the previous audit’s base, so its exposure findings carry over unverified",
+    "No real email, payment, refund, payout or lock operation",
+    "Native MySQL not executed: migration double-run duplication is proven only on the SQLite path and MySQL reserved-word behaviour only by source review",
+    "No external SMTP, AI, push or channel-provider verification",
+    "No exhaustive WCAG/manual assistive-technology assessment, load test, multi-browser/device test or deployment-security audit",
+    "SEO/canonical/sitemap behavior not re-executed because every serving file involved is unchanged between the two branches"
+  ]
+}
