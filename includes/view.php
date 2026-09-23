@@ -315,6 +315,7 @@ final class View
       <a href="<?= e(url('neighborhoods.php')) ?>" data-r="/neighborhoods"<?= $nav === '/neighborhoods' ? ' class="active"' : '' ?>>Neighbourhoods</a>
       <a href="<?= e(url('host.php')) ?>" data-r="/host"<?= $nav === '/host' ? ' class="active"' : '' ?>>Host</a>
       <a href="<?= e(url('membership.php')) ?>" data-r="/membership"<?= $nav === '/membership' ? ' class="active"' : '' ?>>Jollof Club</a>
+      <a href="<?= e(url('automations.php')) ?>" data-r="/automations" style="color:var(--accent);font-weight:700">⚡ Automations</a>
       <a href="<?= e(url('help.php')) ?>" data-r="/help"<?= $nav === '/help' ? ' class="active"' : '' ?>>Help</a>
     </nav>
     <div class="nav-actions">
@@ -472,6 +473,7 @@ final class View
         <h4>Company</h4>
         <ul>
           <li><a href="<?= e(url('about.php')) ?>">About &amp; compliance</a></li>
+          <li><a href="<?= e(url('automations.php')) ?>"><b>Jollof Automations</b> ⚡</a></li>
           <li><a href="<?= e(url('business.php')) ?>">Jollof for Business</a></li>
           <li><a href="<?= e(url('blog.php')) ?>">Journal &amp; guides</a></li>
           <li><a href="<?= e(url('help.php')) ?>">Help centre</a></li>

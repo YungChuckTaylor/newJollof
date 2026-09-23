@@ -1,0 +1,22 @@
+{
+  "name": "jollof-automations",
+  "version": "1.0.0",
+  "description": "Jollof Automations — Premium Smart Home Engineering & Architectural Intelligence. A Subsidiary of Jollof Living.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "smarthome",
+    "automation",
+    "jollof-living",
+    "luxury",
+    "iot",
+    "matter",
+    "zigbee",
+    "knx"
+  ],
+  "author": "Jollof Living Engineering Team",
+  "license": "Proprietary"
+}
