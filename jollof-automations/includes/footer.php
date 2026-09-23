@@ -11,7 +11,7 @@ declare(strict_types=1);
         <div class="footer-col">
           <div style="margin-bottom:16px">
             <a href="index.php">
-              <img src="assets/img/automations-logo-white.png" alt="Jollof Automations" height="42" style="display:block;max-width:100%;object-fit:contain;">
+              <img src="assets/img/automations-logo-light.png" alt="Jollof Automations" style="height:36px;width:auto;max-width:180px;object-fit:contain;display:block;">
             </a>
           </div>
           <p>

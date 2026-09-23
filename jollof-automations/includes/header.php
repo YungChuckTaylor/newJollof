@@ -45,9 +45,9 @@ $activeNav = $activeNav ?? 'home';
 
   <!-- Main Corporate Navigation -->
   <header class="site-header">
-    <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+    <div class="wrap nav-container">
       <a href="index.php" class="brand-logo" aria-label="Jollof Automations Home">
-        <img src="assets/img/automations-logo.png" alt="Jollof Automations" class="brand-logo-img">
+        <img src="assets/img/automations-logo.png" alt="Jollof Automations" class="brand-logo-img" style="height:36px;width:auto;max-width:180px;object-fit:contain;display:block;">
       </a>
 
       <nav class="nav-links">
@@ -56,12 +56,12 @@ $activeNav = $activeNav ?? 'home';
         <a href="lab.php" class="<?= $activeNav === 'lab' ? 'active' : '' ?>">Experience Lab</a>
         <a href="estimator.php" class="<?= $activeNav === 'estimator' ? 'active' : '' ?>">Cost Estimator</a>
         <a href="case-studies.php" class="<?= $activeNav === 'cases' ? 'active' : '' ?>">Case Studies</a>
-        <a href="process.php" class="<?= $activeNav === 'process' ? 'active' : '' ?>">Our Process</a>
+        <a href="process.php" class="<?= $activeNav === 'process' ? 'active' : '' ?>">Process</a>
       </nav>
 
-      <div class="header-actions" style="display:flex;align-items:center;gap:12px;">
-        <a href="leads.php" style="font-size:12.5px;color:var(--muted);text-decoration:none;font-weight:600;padding:6px 10px;border-radius:6px;border:1px solid var(--line);" title="Back-Office Leads">Leads Desk</a>
-        <a href="book-survey.php" class="btn-corp btn-corp-primary" style="padding:10px 18px;font-size:13.5px">Book Site Survey</a>
+      <div class="header-actions">
+        <a href="leads.php" style="font-size:12px;color:var(--muted);text-decoration:none;font-weight:600;padding:6px 10px;border-radius:6px;border:1px solid var(--line);white-space:nowrap;" title="Back-Office Leads">Leads Desk</a>
+        <a href="book-survey.php" class="btn-corp btn-corp-primary" style="padding:9px 18px;font-size:13px;white-space:nowrap;">Book Site Survey</a>
       </div>
     </div>
   </header>
