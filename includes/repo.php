@@ -55,6 +55,45 @@ final class Repo
         unset(self::$memo['settings']);
     }
 
+    /* ======================================================== feature flags */
+
+    /**
+     * Capability flags. A flag gates UI claims: marketing copy for a feature
+     * may only render while its backing service is switched on and proven.
+     * Missing table ⇒ everything is off (an un-migrated install claims nothing).
+     */
+    public static function flags(): array
+    {
+        try {
+            return self::memo('flags', static function () {
+                if (!DB::tableExists('feature_flags')) {
+                    return [];
+                }
+                return DB::pairs('SELECT flag_key, enabled FROM feature_flags');
+            });
+        } catch (Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function flag(string $key, bool $default = false): bool
+    {
+        $f = self::flags();
+        return array_key_exists($key, $f)
+            ? in_array((string) $f[$key], ['1', 'true', 'on', 'yes'], true)
+            : $default;
+    }
+
+    /** The on-set, for the client payload: ['loyalty.redeem' => true, …]. */
+    public static function flagsForClient(): array
+    {
+        $out = [];
+        foreach (self::flags() as $key => $value) {
+            $out[(string) $key] = in_array((string) $value, ['1', 'true', 'on', 'yes'], true);
+        }
+        return $out;
+    }
+
     /** Booking maths constants (cleaning, service, vat, discounts…). */
     public static function rates(): array
     {
@@ -591,6 +630,14 @@ final class Repo
             DB::update('properties', [
                 'rating'        => round((float) $row['avg_rating'], 2),
                 'reviews_count' => (int) $row['n'],
+            ], 'id = :id', ['id' => $propertyId]);
+        } else {
+            /* No published reviews ⇒ no rating to show. Without this branch a
+               hidden or deleted review left its star average on the listing
+               forever (A76). */
+            DB::update('properties', [
+                'rating'        => 0,
+                'reviews_count' => 0,
             ], 'id = :id', ['id' => $propertyId]);
         }
     }

@@ -238,6 +238,7 @@ const PAGE_MAP = {
   "/app": "app.php",
   "/future": "future.php",
   "/concierge": "concierge.php",
+  "/agent": "agent.php",
   "/messages": "messages.php",
   "/notifications": "notifications.php",
   "/trips": "trips.php",
@@ -1163,7 +1164,7 @@ function shareStay(id){ const p=PROPERTIES.find(x=>x.id===id);
 }
 function gcalStay(id){ const p=PROPERTIES.find(x=>x.id===id);
   const url=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent("Stay — "+p.name)}&dates=${todayStr(7).replace(/-/g,"")}/${todayStr(10).replace(/-/g,"")}&details=${encodeURIComponent(p.name+" via Jollof Living")}&location=${encodeURIComponent(p.area+", "+p.city)}`;
-  window.open(url,"_blank"); toast("Added to Google Calendar","calendar");
+  window.open(url,"_blank"); toast("Google Calendar opened — save the event there to add it to your calendar","calendar");
 }
 async function joinWait(id){
   const p=PROPERTIES.find(x=>x.id===id)||{};
@@ -1346,7 +1347,7 @@ function phoneMock(){ return `<div class="phone"><div class="notch"></div><div c
   <div class="mini-card"><img src="${img('p1')}" alt=""><div class="t"><b style="font-family:var(--fs-serif);font-size:13px">The Onyx Penthouse</b><div class="small">₦185,000/night · ★ 4.97</div></div></div>
   <div class="mini-card"><img src="${img('p3')}" alt=""><div class="t"><b style="font-family:var(--fs-serif);font-size:13px">Villa Azur</b><div class="small">₦420,000/night · ★ 4.99</div></div></div>
   <div style="background:var(--gold-grad);border-radius:12px;padding:10px;color:#231a05;font-size:11.5px;font-weight:500">${I.bot} Jollof: “Booked your boat cruise for Saturday ⛵”</div>
-  <div style="margin-top:auto;background:var(--card);border:1px solid var(--line-soft);border-radius:12px;padding:8px 10px;font-size:10px;color:var(--ink-faint)">Check-in code · 4471# · Sep 6, 3PM</div>
+  <div style="margin-top:auto;background:var(--card);border:1px solid var(--line-soft);border-radius:12px;padding:8px 10px;font-size:10px;color:var(--ink-faint)">${(S.bookings||[]).some(x=>x.code)?`Check-in code · ${esc(S.bookings.find(x=>x.code).code)}`:"Check-in codes appear here once a stay is confirmed"}</div>
 </div></div>`; }
 
 
@@ -1358,12 +1359,16 @@ function phoneMock(){ return `<div class="phone"><div class="notch"></div><div c
 
 const BOOK_STATE = {
   id:null, in:todayStr(7), out:todayStr(10), guests:2, policy:"moderate",
-  addons:[], promo:null, gift:null, method:"card", split:false, req:false,
+  addons:[], promo:null, giftCode:null, giftAmt:0, method:"card", split:false, req:false,
 };
 
+/* Capability ledger (R1): promises about outside services render only when
+   their flag is switched on. Absent flag ⇒ off — an un-migrated install
+   claims nothing. */
+const jlFlag=(k)=>!!(window.JL&&JL.flags&&JL.flags[k]===true);
 function pBooking(id, q) {
   const p=PROPERTIES.find(x=>x.id===id); if(!p) return p404();
-  BOOK_STATE.id=id; BOOK_STATE.req=!!(q&&q.req); BOOK_STATE.addons=[]; BOOK_STATE.promo=null; BOOK_STATE.gift=null; BOOK_STATE.method="card"; BOOK_STATE.split=false;
+  BOOK_STATE.id=id; BOOK_STATE.req=!!(q&&q.req); BOOK_STATE.addons=[]; BOOK_STATE.promo=null; BOOK_STATE.giftCode=null; BOOK_STATE.giftAmt=0; BOOK_STATE.method="card"; BOOK_STATE.split=false;
   return `
   <div class="page-top"></div>
   <div class="page-head"><div class="wrap">
@@ -1381,7 +1386,7 @@ function bkCalc(){
   const p=PROPERTIES.find(x=>x.id===BOOK_STATE.id);
   const n=nightsBetween(BOOK_STATE.in,BOOK_STATE.out)||3;
   const addons=BOOK_STATE.addons.map(k=>({k}));
-  return priceMath(p,n,{addons,promo:BOOK_STATE.promo,gift:BOOK_STATE.gift});
+  return priceMath(p,n,{addons,promo:BOOK_STATE.promo,gift:BOOK_STATE.giftAmt||0});
 }
 function bkDates(){
   const p=PROPERTIES.find(x=>x.id===BOOK_STATE.id);
@@ -1442,13 +1447,13 @@ function bkAddons(){
         </div>
         <div class="panel" id="bkSplitNote">
           <h3 style="font-size:18px">Extended stay agreement</h3>
-          <p class="muted" style="font-size:13.5px">For 30+ nights we generate a digital lease-style agreement. ${I.check} Signed securely, stored in your encrypted vault.</p>
+          <p class="muted" style="font-size:13.5px">For 30+ nights we prepare a written extended-stay agreement by email before you sign — the document vault is not part of this install.</p>
         </div>
-        <div class="panel">
+        ${nightsBetween(BOOK_STATE.in,BOOK_STATE.out)>=30?`<div class="panel">
           <h3 style="font-size:18px">Split payments</h3>
           <label class="chk" style="margin-top:6px"><input type="checkbox" id="bkSplit" ${BOOK_STATE.split?"checked":""}> Pay 50% now, 50% at check-in (30+ nights)</label>
           <div class="small" style="margin-top:6px">Eases the financial burden of long-term luxury living.</div>
-        </div>
+        </div>`:""}
       </div>
     </div>
     <div class="wizard-foot">
@@ -1489,7 +1494,7 @@ function bkPayment(){
             <div class="brow"><span>${fmt(m.nightly)} × ${nightsBetween(BOOK_STATE.in,BOOK_STATE.out)||3} nights ${m.monthly?"(−25% monthly)":m.weekly?"(−12% weekly)":""}</span><span>${fmt(m.subtotal)}</span></div>
             ${BOOK_STATE.addons.map(k=>`<div class="brow"><span>${ADDONS[k].name}</span><span>${ADDONS[k].price>=1?fmt(ADDONS[k].price):fmt(Math.abs(Math.round(m.subtotal*ADDONS[k].price)))}</span></div>`).join("")}
             ${BOOK_STATE.promo?`<div class="brow"><span style="color:var(--ok)">${PROMOS[BOOK_STATE.promo].label}</span><span class="free">applied</span></div>`:""}
-            ${BOOK_STATE.gift?`<div class="brow"><span style="color:var(--ok)">Gift card ${BOOK_STATE.gift}</span><span class="free">applied</span></div>`:""}
+            ${BOOK_STATE.giftAmt?`<div class="brow"><span style="color:var(--ok)">Gift card ${esc(BOOK_STATE.giftCode)}</span><span class="free">−${fmt(BOOK_STATE.giftAmt)}</span></div>`:""}
             <div class="brow"><span>Cleaning fee</span><span>${fmt(RATES.cleaning)}</span></div>
             <div class="brow"><span>Service fee (8%)</span><span>${fmt(m.svc)}</span></div>
             <div class="brow"><span>VAT (7.5%)</span><span>${fmt(m.vat)}</span></div>
@@ -1528,7 +1533,7 @@ function bkReview(){
           <div class="krow"><span class="k">Add-ons</span><span class="v">${BOOK_STATE.addons.length?BOOK_STATE.addons.map(k=>ADDONS[k].name).join(", "):"None"}</span></div>
           <div class="krow"><span class="k">Split payment</span><span class="v">${BOOK_STATE.split?"50% now · 50% at check-in":"—"}</span></div>
           ${BOOK_STATE.req?'<div class="krow"><span class="k">Host confirmation</span><span class="v">Within 24 hours</span></div>':""}
-          <div class="krow"><span class="k">Check-in</span><span class="v">Keyless code · from 3:00 PM</span></div>
+          <div class="krow"><span class="k">Check-in</span><span class="v">From 3:00 PM · entry code issued with your confirmation</span></div>
         </div>
         <label class="chk" style="margin-top:4px"><input type="checkbox" id="bkTerms"> I agree to the house rules, cancellation policy, and extended-stay terms (if 30+ nights)</label>
         <label class="chk" style="margin-top:8px"><input type="checkbox" checked> Send me booking updates via email, SMS &amp; WhatsApp</label>
@@ -1564,7 +1569,7 @@ function bindBooking(id,q){
     const next1=e.target.closest("#bkNext1"); if(next1){ BOOK_STATE.policy=$("#bkPol")?.value||BOOK_STATE.policy; bkStep(1); return; }
     const next2=e.target.closest("#bkNext2"); if(next2){ const pol=$("#bkPol"); if(pol) BOOK_STATE.policy=pol.value;
       $$("[data-addon]").forEach(c=>{ const k=c.dataset.addon; const has=c.checked; if(has&&!BOOK_STATE.addons.includes(k)) BOOK_STATE.addons.push(k); if(!has) BOOK_STATE.addons=BOOK_STATE.addons.filter(x=>x!==k); });
-      const sp=$("#bkSplit"); if(sp) BOOK_STATE.split=sp.checked;
+      const sp=$("#bkSplit"); if(sp) BOOK_STATE.split=sp.checked && nightsBetween(BOOK_STATE.in,BOOK_STATE.out)>=30;
       bkStep(2); return; }
     const next3=e.target.closest("#bkNext3"); if(next3){ bkStep(3); return; }
     const conf=e.target.closest("#bkConfirm"); if(conf){
@@ -1598,7 +1603,7 @@ async function confirmBooking(p){
     checkin:BOOK_STATE.in, checkout:BOOK_STATE.out,
     guests:BOOK_STATE.guests, policy:BOOK_STATE.policy,
     method:BOOK_STATE.method, addons:BOOK_STATE.addons,
-    promo:BOOK_STATE.promo||"", gift:BOOK_STATE.gift||0,
+    promo:BOOK_STATE.promo||"", giftCode:BOOK_STATE.giftCode||"",
     split:!!BOOK_STATE.split, request:!!BOOK_STATE.req,
     name:$("#bkName")?.value||"", email:$("#bkEmail")?.value||"", phone:$("#bkPhone")?.value||"",
   };
@@ -1643,13 +1648,13 @@ function pConfirm(ref){
     <div class="grid-2" style="margin-top:18px">
       <div class="panel" style="text-align:center;padding:20px">
         <div class="small">Digital check-in</div>
-        <div style="font-family:var(--fs-serif);font-size:34px;font-weight:600;letter-spacing:.14em;margin:6px 0">4471#</div>
-        <div class="small">Unlocks ${todayStr(7)} from 3:00 PM · smart lock syncs automatically</div>
+        <div style="font-family:var(--fs-serif);font-size:34px;font-weight:600;letter-spacing:.14em;margin:6px 0">${esc((b.code||((S.bookings.find(x=>x.ref===b.ref)||{}).code))||"on confirmation")}</div>
+        <div class="small">Valid from ${b.in}, 3:00 PM · ${jlFlag("smartlock.sync")?"synced to the door lock":"your host confirms how the code is delivered"}</div>
       </div>
       <div class="panel" style="text-align:center;padding:20px">
         <div class="small">Digital lease agreement</div>
         <div style="font-size:15px;margin:10px 0;color:var(--ink-soft)">${b.nights>=30?"Generated for your 30+ night stay":"Short-stay terms apply"}</div>
-        <button class="btn btn-ghost btn-sm" onclick="toast('Agreement PDF stored in your vault','doc')">${I.doc} View document</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('${b.nights>=30?'Your extended-stay agreement is prepared by our team — watch your inbox':'House rules and cancellation policy from your confirmation email apply to this stay'}','doc')">${I.doc} Stay agreement</button>
       </div>
     </div>
     <div class="btnrow" style="justify-content:center;margin-top:24px">
@@ -1657,7 +1662,7 @@ function pConfirm(ref){
       <a class="btn btn-ghost" onclick="gcalStay('${b.prop}')">${I.calendar} Add to calendar</a>
       <button class="btn btn-ghost" onclick="openInvoice('${b.ref}')">${I.doc} Invoice PDF</button>
     </div>
-    <p class="small" style="text-align:center;margin-top:18px">${I.shield} Funds are held by Jollof Living and released to the host after you confirm check-in.</p>
+    <p class="small" style="text-align:center;margin-top:18px">${I.shield} Funds are held in escrow by Jollof Living and released to the host upon check-out.</p>
   </div></div>`;
 }
 function openInvoice(ref){
@@ -1704,9 +1709,19 @@ function openGiftCard(){
     <div class="frm-row"><label>Gift card code</label><input class="inp" placeholder="JL-GIFT-XXXX" id="gcInp"></div>
     <div class="btnrow"><button class="btn btn-gold" onclick="applyGift()">Apply card</button><button class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>`);
 }
-function applyGift(){ const v=$("#gcInp").value;
-  if(v.trim().length>=8){ BOOK_STATE.gift=60000; closeModal(); toast("Gift card applied — ₦60,000 off","gift"); if($("#bkStage")) bkStep(2); }
-  else toast("Enter a valid gift card code","x");
+async function applyGift(){
+  const v=$("#gcInp").value.trim().toUpperCase();
+  if(v.length<8){ toast("Enter a valid gift card code","x"); return; }
+  // The real balance, checked server-side — the checkout applies the card's
+  // own figure, never a number this script made up.
+  const r=await api("giftcard.php",{action:"check",code:v});
+  if(!r.ok){ toast(r.message||"That gift card code is not valid","x"); return; }
+  const total=(bkCalc().total)||0;
+  BOOK_STATE.giftCode=r.data.code;
+  BOOK_STATE.giftAmt=Math.min(r.data.balance,total>0?total:r.data.balance);
+  closeModal();
+  toast(`${fmt(BOOK_STATE.giftAmt)} gift card credit applied to this reservation`,"gift");
+  if($("#bkStage")) bkStep(2);
 }
 
 /* ---------------- TRIPS ---------------- */
@@ -1755,7 +1770,7 @@ function tripCard(b){
         <button class="btn btn-ghost btn-sm" data-goto="/messages?to=team-onyx">${I.chat} Message</button>
       </div>
     </div>
-    ${b.status==="confirmed"&&nightsBetween(todayStr(),b.in)<=3?`<div style="background:var(--green-soft);padding:11px 18px;font-size:13px;display:flex;gap:10px;align-items:center">${I.key}<span><b>Keyless code ready: 4471#</b> · unlocks ${b.in} from 3:00 PM · smart-lock synced (August / Yale / Nuki)</span></div>`:""}
+    ${b.status==="confirmed"&&nightsBetween(todayStr(),b.in)<=3?`<div style="background:var(--green-soft);padding:11px 18px;font-size:13px;display:flex;gap:10px;align-items:center">${I.key}<span><b>${b.code?`Entry code ready: ${esc(b.code)}`:"Your entry code issues on confirmation"}</b> · valid ${b.in} from 3:00 PM · ${jlFlag("smartlock.sync")?"synced to the door lock":"host confirms how the code is handed over"}</span></div>`:""}
   </div>`;
 }
 function bindTrips(){
@@ -1772,7 +1787,7 @@ async function tripCheckin(ref){
   const r=await tripAction(ref,"checkin"); if(!r) return;
   render(); renderBadges();
   openModal(`<div style="text-align:center;padding:12px 0"><div class="why-ico" style="margin:0 auto 16px;width:60px;height:60px;border-radius:18px">${I.key}</div>
-    <h2>You're checked in 🎉</h2><p class="muted" style="margin:8px 0 2px">Welcome to ${esc(b?b.name:"your residence")}. The host has been notified and the escrow payment is now released.</p>
+    <h2>You're checked in 🎉</h2><p class="muted" style="margin:8px 0 2px">Welcome to ${esc(b?b.name:"your residence")}. The host has been notified and your funds remain securely protected in escrow until check-out.</p>
     <div class="small" style="margin-bottom:16px">If anything isn't right, report it from your stay dashboard within 24h.</div>
     <div class="btnrow" style="justify-content:center"><button class="btn btn-green" onclick="closeModal()">Enjoy your stay</button><button class="btn btn-ghost" data-goto="/messages">Message host</button></div></div>`);
 }
@@ -1878,7 +1893,8 @@ async function wlCreate(){
   const r=await api("wishlist.php",{action:"create",name:name.trim()});
   if(!r.ok){ toast(r.message||"Could not create that list","x"); return; }
   await syncState(false);
-  S.activeWishlist=r.slug||name.trim();
+  const createdSlug=(r.data&&r.data.slug)||r.slug||name.trim();
+  S.activeWishlist=createdSlug;
   render(); toast("List created ✨","gift");
 }
 async function toggleWish(id,btn){
@@ -1895,7 +1911,8 @@ async function toggleWish(id,btn){
     if(btn){ btn.classList.toggle("active",had); btn.innerHTML=had?I.heartFill:I.heart; }
     renderBadges(); toast(r.message||"Could not update your wishlist","x"); return;
   }
-  toast(r.saved?"Saved to your wishlist — alerts on":"Removed from wishlist","heart");
+  const isSaved = (r.data&&typeof r.data.saved!=="undefined") ? r.data.saved : r.saved;
+  toast(isSaved?"Saved to your wishlist — alerts on":"Removed from wishlist","heart");
   const grid=$("#staysGrid"); if(grid&&typeof filteredStays==="function") grid.innerHTML=filteredStays().map(stayCard).join("");
 }
 
@@ -1929,7 +1946,7 @@ async function toggleCompare(id){
   if(!requireAuth("compare residences")) return;
   const r=await api("compare.php",{action:"toggle",property:id});
   if(!r.ok){ toast(r.message||"Could not update compare","scale"); return; }
-  S.compare=r.compare||S.compare;
+  S.compare=(r.data&&r.data.compare)||r.compare||S.compare;
   toast(r.message||"Compare updated","scale");
   render(); renderBadges();
 }
@@ -2091,7 +2108,7 @@ function concReply(txt){
     return `<b>${p.name}</b> offers: ${p.amens.slice(0,4).join(", ").toLowerCase()} and more. Use the filters in Explore to narrow by amenity.`;
   }
   if(/payment|pay|escrow|split|installment|transfer|currency|crypto/.test(t))
-    return "Pay by card, bank transfer, USSD, mobile money, Paystack, Flutterwave, Stripe, Apple/Google Pay — in NGN, USD, GBP or EUR. Funds sit in <b>escrow</b> until you check in; 30+ night stays split <b>50/50</b>. 🔒";
+    return `Pay by ${PAY_METHODS.map(m=>m.name.toLowerCase()).join(", ")} — billed in ${JL.currency||"NGN"}. Funds ride in <b>escrow</b> and release to the host at check-out; 30+ night stays split <b>50/50</b>. 🔒`;
   if(/chef|cook|food|jollof|restaurant/.test(t)) return "Our private chefs are Jollof-approved — Nigerian fine dining, jollof masterclasses and tasting menus in your kitchen. From ₦55,000. Want your dates? 🍲";
   if(/boat|cruise|lagoon|experience|tour/.test(t)) return "Signature experiences: <b>Lagos sunset cruises</b> (₦85k), private chefs, spa rituals and heritage tours. Bundle any with your stay — save ~15%. 🛥️";
   if(/safe|security|verified|trust/.test(t)) return "Every Jollof listing is KYC-verified, AI-screened and (for the gold badge) inspected in person. Payments ride in escrow until you confirm check-in. 🛡️";
@@ -2185,7 +2202,7 @@ function pAccount(){
       <div class="avatar" style="width:76px;height:76px;font-size:30px">${esc((U.name||"G").charAt(0).toUpperCase())}</div>
       <div style="flex:1;min-width:220px"><b style="font-family:var(--fs-serif);font-size:25px">${esc(U.name||"Guest")}</b>
       <div class="small">${esc(U.email||"")}${U.phone?" · "+esc(U.phone):""} · Member since ${esc(U.memberSince||"")}</div>
-      <div class="btnrow" style="margin-top:8px">${U.emailVerified?`<span class="badge ok">${I.check} Email verified</span>`:`<span class="badge">Email unverified</span>`}${U.phone?`<span class="badge ok">${I.check} Phone verified</span>`:""}${U.kyc?`<span class="badge">${I.gold} ID verified</span>`:`<span class="badge">ID pending</span>`}<span class="badge">${tier.letter} ${tier.name}</span></div></div>
+      <div class="btnrow" style="margin-top:8px">${U.emailVerified?`<span class="badge ok">${I.check} Email verified</span>`:`<span class="badge" style="background:rgba(217,119,6,0.12);color:#d97706;border:1px solid rgba(217,119,6,0.3)">${I.clock} Email unverified</span><button class="btn btn-ghost btn-sm" onclick="resendEmailVerification(this)" style="font-size:11px;padding:3px 9px;margin-left:4px">${I.mail} Resend email</button>`}${U.phone?`<span class="badge ok">${I.check} Phone verified</span>`:""}${U.kyc?`<span class="badge">${I.gold} ID verified</span>`:`<span class="badge">ID pending</span>`}<span class="badge">${tier.letter} ${tier.name}</span></div></div>
       <div style="text-align:right"><div class="small">Jollof Points</div><div style="font-family:var(--fs-serif);font-size:34px;font-weight:600;color:var(--accent)">${S.points.toLocaleString()}</div>
       <div class="small">${tier.name} · ${tier.mult} multiplier</div>
       <div class="btnrow" style="margin-top:10px;justify-content:flex-end">
@@ -2193,18 +2210,19 @@ function pAccount(){
         <a class="btn btn-ghost btn-sm" href="${JL.base}logout.php">Log out</a>
       </div></div>
     </div>
+    ${!U.emailVerified?`<div class="ai-callout" style="margin-top:14px;background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.25);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div>${I.clock} <b>Email verification pending:</b> We sent a verification link to <b>${esc(U.email||"your address")}</b>. Please check your inbox or spam folder to verify.</div><button class="btn btn-ghost btn-sm" onclick="resendEmailVerification(this)">${I.mail} Resend link</button></div>`:""}
 
     <div class="grid-2" style="margin-top:18px">
       <div class="panel"><h3 style="font-size:18px">Identity verification (KYC)</h3>
         ${[["Government ID uploaded",!!U.kyc],["Selfie match complete",!!U.kyc],["Phone verified",!!U.phone],["Background check (optional)",false]].map(([k,v])=>`<div class="krow"><span class="k">${k}</span><span class="v" style="color:${v?"var(--ok)":"var(--ink-faint)"}">${v?I.check:"pending"}</span></div>`).join("")}
-        <div class="btnrow" style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="toast('ID details opened — re-upload anytime','doc')">${I.doc} Manage documents</button></div>
+        ${jlFlag("account.documents")?`<div class="btnrow" style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="toast('ID details opened — re-upload anytime','doc')">${I.doc} Manage documents</button></div>`:`<p class="small" style="margin-top:8px;color:var(--ink-faint)">${I.shield} The document vault is not provisioned on this install — send ID copies to us via <a href="${URL('/help')}">the help centre</a> and we will attach them to your file.</p>`}
       </div>
       <div class="panel"><h3 style="font-size:18px">Security</h3>
         <div class="krow"><span class="k">Password</span><span class="v"><button class="btn btn-ghost btn-sm" onclick="openPasswordChange()">Change password</button></span></div>
-        <div class="krow"><span class="k">Two-factor authentication</span><span class="v" style="color:var(--ok)">${I.check} SMS + authenticator</span></div>
+        <div class="krow"><span class="k">Two-factor authentication</span><span class="v" style="color:${jlFlag("account.2fa")?"var(--ok)":"var(--ink-faint)"}">${jlFlag("account.2fa")?I.check+" SMS + authenticator":"not configured yet"}</span></div>
         <div class="krow"><span class="k">Last sign-in</span><span class="v">${esc(U.lastLogin||"just now")}</span></div>
-        <div class="krow"><span class="k">NDPR / GDPR</span><span class="v">Data export &amp; erase ready</span></div>
-        <div class="btnrow" style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="toast('Security centre opened','lock')">${I.lock} Manage</button></div>
+        <div class="krow"><span class="k">NDPR / GDPR</span><span class="v">${jlFlag("account.data_rights")?"Self-service export & erase enabled":"Data export & erase handled on request"}</span></div>
+        ${jlFlag("account.2fa")?`<div class="btnrow" style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="toast('Security centre opened','lock')">${I.lock} Manage</button></div>`:`<p class="small" style="margin-top:8px;color:var(--ink-faint)">Password changes sign every other device out immediately; two-step sign-in will appear here when the auth service is enabled.</p>`}
       </div>
     </div>
 
@@ -2216,7 +2234,7 @@ function pAccount(){
         <label class="chk" style="margin-top:8px"><input type="checkbox" checked> WhatsApp booking updates</label>
       </div>
       <div class="panel"><h3 style="font-size:18px">Connected services</h3>
-        ${[["Google Calendar & Outlook",true],["Apple / Google Wallet passes",true],["WhatsApp Business",true],["QuickBooks, Xero (host)",false],["Salesforce / HubSpot (business)",false]].map(([k,v])=>`<div class="krow"><span class="k">${k}</span><span class="v">${v?`<span style="color:var(--ok)">connected</span>`:"<button class='btn btn-ghost btn-sm' onclick=\"toast('Integration connection started','globe')\">Connect</button>"}</span></div>`).join("")}
+        ${[["Google Calendar & Outlook",jlFlag("channels.google_sync")],["Apple / Google Wallet passes",jlFlag("channels.wallet_passes")],["WhatsApp Business",jlFlag("channels.whatsapp")],["QuickBooks, Xero (host)",jlFlag("channels.accounting")],["Salesforce / HubSpot (business)",jlFlag("channels.crm")]].map(([k,v])=>`<div class="krow"><span class="k">${k}</span><span class="v">${v?`<span style="color:var(--ok)">connected</span>`:"<span style=\"color:var(--ink-faint)\">not live on this install</span>"}</span></div>`).join("")}
       </div>
     </div>
 
@@ -2224,13 +2242,65 @@ function pAccount(){
       <b style="font-family:var(--fs-serif);font-size:19px">Report, block &amp; community</b>
       <p class="small" style="margin:6px 0 14px">Respect is the house rule. Every member is protected by our anti-discrimination policy and community guidelines.</p>
       <div class="btnrow" style="justify-content:center">
-        <button class="btn btn-ghost btn-sm" onclick="toast('Reporting centre opened — we respond within 24h','shield')">Report a concern</button>
+        <button class="btn btn-ghost btn-sm" onclick="openReportModal('community','0')">Report a concern</button>
         <button class="btn btn-ghost btn-sm" onclick="toast('Blocked users are never shown your listings','lock')">Blocked users</button>
         <button class="btn btn-ghost btn-sm" data-goto="/about">NDPR &amp; compliance</button>
       </div>
     </div>
   </div></div>`;
 }
+function openReportModal(targetType, targetId){
+  openModal(`<h2 style="margin-bottom:4px">Report a safety concern</h2>
+    <p class="small" style="margin-bottom:14px">Our Trust &amp; Safety team investigates every report within 24 hours.</p>
+    <div class="frm-row"><label>Reason</label>
+      <select class="inp" id="repCat">
+        <option value="safety">Safety / security violation</option>
+        <option value="scam">Fraud / scam attempt</option>
+        <option value="harassment">Harassment / offensive behavior</option>
+        <option value="inaccurate">Inaccurate listing details</option>
+        <option value="other">Other issue</option>
+      </select>
+    </div>
+    <div class="frm-row"><label>Details</label>
+      <textarea class="txa" id="repDetail" rows="3" placeholder="Describe what happened with as much detail as possible..."></textarea>
+    </div>
+    <div class="btnrow"><button class="btn btn-gold" onclick="submitReportModal('${targetType||"platform"}','${targetId||"0"}')">Submit report</button>
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>`);
+}
+async function submitReportModal(targetType, targetId){
+  const detail=($("#repDetail")?.value||"").trim();
+  const category=$("#repCat")?.value||"safety";
+  if(!detail){ toast("Please explain the concern for our safety team","x"); return; }
+  const r=await api("account.php",{action:"report-concern",target_type:targetType,target_id:targetId,category,detail});
+  closeModal();
+  toast(r.message||"Report submitted to Trust & Safety","shield");
+}
+
+async function resendEmailVerification(btn){
+  if(btn){ btn.disabled=true; btn.textContent="Sending…"; }
+  try {
+    const r=await api("auth.php",{action:"resend_verification"});
+    if(r.ok){
+      toast(r.message||"Verification email sent! Check your inbox.","mail");
+      if(btn){
+        let s=60;
+        btn.textContent=`Resend in ${s}s`;
+        const t=setInterval(()=>{
+          s--;
+          if(s<=0){ clearInterval(t); btn.disabled=false; btn.textContent="Resend email"; }
+          else { btn.textContent=`Resend in ${s}s`; }
+        },1000);
+      }
+    } else {
+      toast(r.message||"Could not send email","x");
+      if(btn){ btn.disabled=false; btn.textContent="Resend email"; }
+    }
+  } catch(e){
+    toast("Network error","x");
+    if(btn){ btn.disabled=false; btn.textContent="Resend email"; }
+  }
+}
+
 function openPasswordChange(){
   openModal(`<h2 style="margin-bottom:4px">Change your password</h2>
     <p class="small" style="margin-bottom:14px">Choose something long — a short phrase beats a scrambled word.</p>
@@ -2286,7 +2356,7 @@ function pAuth(mode){
         ${isIn?"":`<div class="frm-row"><label>Full name</label><input class="inp" id="auName" name="name" placeholder="Adebayo Ogunlesi" autocomplete="name" required></div>`}
         <div class="frm-row"><label>Email</label><input class="inp" id="auEmail" name="email" type="email" placeholder="you@example.com" autocomplete="${isIn?"username":"email"}" required></div>
         ${isIn?"":`<div class="frm-row"><label>Phone <span class="small">(optional)</span></label><input class="inp" id="auPhone" name="phone" placeholder="+234 803 555 0123" autocomplete="tel"></div>`}
-        <div class="frm-row"><label>Password</label>
+        <div class="frm-row"><label style="display:flex;justify-content:space-between"><span>Password</span>${isIn?`<a href="${URL("/reset.php")}" class="small" style="color:var(--accent);text-decoration:none">Forgot password?</a>`:""}</label>
           <div class="pw-wrap"><input class="inp" id="auPass" name="password" type="password" placeholder="${isIn?"••••••••":"At least 8 characters"}" autocomplete="${isIn?"current-password":"new-password"}" required>
           <button type="button" id="auEye" aria-label="Show or hide password">${I.eye}</button></div>
         </div>
@@ -2334,8 +2404,21 @@ function bindAuth(){
       const picked=f.querySelector('input[name="account_type"]:checked');
       payload.account_type=picked?picked.value:"customer";
     }
+    const otpEl=$("#auOtp");
+    if(otpEl && !isRegister) payload.otp=otpEl.value.trim();
     const r=await api("auth.php",payload);
-    if(!r.ok){ btn.disabled=false; btn.textContent=label; toast(r.message||"Could not sign you in","x"); return; }
+    if(!r.ok){
+      btn.disabled=false; btn.textContent=label;
+      // Admin sign-in needs the second factor (server-enforced) — reveal the code field.
+      if(!isRegister && r.errors && r.errors.needsOtp && !$("#auOtp")){
+        const row=document.createElement("div");
+        row.className="frm-row";
+        row.innerHTML=`<label>Administrator code</label><input class="inp" id="auOtp" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code">`;
+        btn.before(row);
+        row.querySelector("input").focus();
+      }
+      toast(r.message||"Could not sign you in","x"); return;
+    }
     toast(r.message||"Welcome ✨","check");
     // The server decides where to land: owners go to their workspace,
     // customers to their account. An explicit ?next= always wins.
@@ -2621,7 +2704,7 @@ function wizPolicy(){
         <div class="krow"><span class="k">Payout schedule</span><span class="v">Weekly, automatic</span></div>
         <div class="krow"><span class="k">Withholding tax (WHT)</span><span class="v">Auto-computed &amp; filed</span></div>
         <div class="krow"><span class="k">Damage protection</span><span class="v">Included up to ₦2m</span></div>
-        <div class="krow"><span class="k">Escrow release</span><span class="v">After guest check-in</span></div>
+        <div class="krow"><span class="k">Escrow release</span><span class="v">After guest check-out</span></div>
       </div>
     </div>
     <div class="wizard-foot"><button class="btn btn-ghost" onclick="wizBack()">← Back</button><button class="btn btn-gold" id="wizNext">Save &amp; continue</button></div>
@@ -3287,11 +3370,9 @@ function payInvoices(){
   return `<div class="panel"><h3 style="font-size:18px">Transactions</h3>
     <div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Invoice</th><th>Description</th><th>Amount</th><th>Status</th><th></th></tr></thead>
     <tbody>
-      ${S.bookings.slice(0,4).map((b,i)=>`<tr><td class="strong">JL-2026-${9000+i}</td><td>${esc(b.name)} · ${b.in} → ${b.out}</td><td>${fmt(b.total)}</td>
-      <td><span class="pill-status ${b.status==="confirmed"?"ok":"info"}">${b.status==="confirmed"?"Paid · escrow":"Pending"}</span></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="openInvoice('${b.ref}')">${I.doc} PDF</button></td></tr>`).join("")}
-      <tr><td class="strong">JL-2026-8311</td><td>Lagos Lagoon Cruise · 2 guests</td><td>₦170,000</td><td><span class="pill-status ok">Paid</span></td><td><button class="btn btn-ghost btn-sm" onclick="toast('Receipt downloaded','download')">${I.doc} PDF</button></td></tr>
-      <tr><td class="strong">JL-2026-8304</td><td>Gift card purchase · ₦100,000</td><td>₦100,000</td><td><span class="pill-status ok">Paid</span></td><td><button class="btn btn-ghost btn-sm" onclick="toast('Receipt downloaded','download')">${I.doc} PDF</button></td></tr>
+      ${S.bookings.length?S.bookings.map((b)=>`<tr><td class="strong">${esc(b.ref)}</td><td>${esc(b.name)} · ${b.in} → ${b.out}</td><td>${fmt(b.total)}</td>
+      <td><span class="pill-status ${b.status==="confirmed"?"ok":"info"}">${b.status==="confirmed"?"Paid · escrow":esc(b.status)}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openInvoice('${b.ref}')">${I.doc} PDF</button></td></tr>`).join(""):`<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--muted)">No transaction receipts found for your account.</td></tr>`}
     </tbody></table></div>
     <div class="small" style="margin-top:10px">Corporate billing supported — add a PO number to any invoice in your account settings.</div>
   </div>`;
@@ -3398,10 +3479,10 @@ function pMembership(){
    href="https://wa.me/?text=${encodeURIComponent("Stay somewhere beautiful in Lagos — use my Jollof Living code "+REFERRAL_CODE+" and we both get ₦10,000. "+location.origin+URL("/"))}">${I.send} WhatsApp</a>
           <button class="btn btn-ghost btn-sm" data-goto="/referral">Referral centre</button></div>
         </div>
-        <div class="panel"><h3 style="font-size:20px">Rewards you can redeem now</h3>
+        <div class="panel"><h3 style="font-size:20px">Rewards — redeemed with our concierge</h3>
           ${[["Free airport transfer","6,000 pts","redeem"],["Late check-out (2pm)","4,000 pts","redeem"],["Complimentary room upgrade","20,000 pts","redeem"],["Private chef evening","30,000 pts","redeem"],["₦50,000 travel credit","45,000 pts","redeem"]].map(r=>`
           <div class="krow"><span class="k">${r[0]}</span><span class="v"><span class="small" style="color:var(--accent)">${r[1]}</span>
-          <button class="btn btn-gold btn-sm" onclick="toast('Redeemed: ${r[0].toUpperCase().replace(/'/g,"")} ✨','gift')">Redeem</button></span></div>`).join("")}
+          ${jlFlag("loyalty.redeem")?`<button class="btn btn-gold btn-sm" onclick="toast('Redemption request noted — our concierge confirms before your stay','gift')">Redeem</button>`:`<button class="btn btn-ghost btn-sm" onclick="copyText('Reward request: ${r[0].replace(/'/g,"")} (${r[1]}) — ${S.points} points on file','Reward note copied — paste it into a booking note or send it to support')">How to redeem</button>`}</span></div>`).join("")}
         </div>
         <div class="panel"><h3 style="font-size:20px">Gift cards</h3>
           <p class="muted" style="font-size:14px">Send the gift of a beautiful stay: edible, elegant, never expires.</p>
@@ -3439,12 +3520,12 @@ function pReferral(){
     <div class="grid-2">
       <div class="panel" style="background:linear-gradient(150deg,var(--card),var(--gold-soft))">
         <h3 style="font-size:22px">Your code</h3>
-        <div style="font-family:var(--fs-serif);font-size:clamp(2rem,6vw,3.4rem);font-weight:600;letter-spacing:.18em;color:var(--accent);margin:12px 0">ADEBAYO10</div>
-        <div class="btnrow"><button class="btn btn-gold" onclick="toast('Code copied — paste it anywhere','share')">${I.share} Copy link</button>
+        <div style="font-family:var(--fs-serif);font-size:clamp(2rem,6vw,3.4rem);font-weight:600;letter-spacing:.18em;color:var(--accent);margin:12px 0">${esc((USER&&USER.referral)||'JOLLOF10')}</div>
+        <div class="btnrow"><button class="btn btn-gold" onclick="copyText(location.origin+URL('/')+'?ref='+encodeURIComponent((USER&&USER.referral)||'JOLLOF10'),'Referral link copied — ready to share')">${I.share} Copy link</button>
         <button class="btn btn-green" onclick="toast('Shared to WhatsApp ✨','send')">${I.send} Share on WhatsApp</button>
         <button class="btn btn-ghost" onclick="toast('Shared to Instagram stories','camera')">${I.camera} Instagram</button></div>
-        <div class="krow" style="margin-top:14px"><span class="k">Friends joined</span><span class="v">14</span></div>
-        <div class="krow"><span class="k">Credits earned</span><span class="v" style="color:var(--ok)">₦140,000</span></div>
+        <div class="krow" style="margin-top:14px"><span class="k">Friends joined</span><span class="v">${(USER&&USER.referralCount)||0}</span></div>
+        <div class="krow"><span class="k">Credits earned</span><span class="v" style="color:var(--ok)">${fmt((USER&&USER.referralCredits)||0)}</span></div>
       </div>
       <div class="panel"><h3 style="font-size:22px">Affiliate programme</h3>
         <p class="muted" style="font-size:14px">Travel bloggers, creators and influencers earn <b>8% commission</b> on every booking they refer — with a dashboard, real-time tracking and monthly payouts.</p>
@@ -3504,14 +3585,11 @@ function pHelp(q){
     <div class="grid-3" style="margin-top:30px">
       ${[["chat","24/7 live chat","Chat with the team or Jollof AI",URL("/concierge")],["phone","Call us","+234 700 JOLLOF (24/7)",URL("/concierge")],["send","Email support","care@jollofliving.com",URL("/concierge")]].map(c=>`
       <div class="panel" style="text-align:center"><div class="why-ico" style="margin:0 auto 12px">${I[c[0]]}</div>
-      <b style="font-family:var(--fs-serif);font-size:19px">${c[1]}</b><p class="small">${c[2]}</p><a class="link-arrow" style="font-size:11.5px" href="${c[3]}">Open ${I.arrow}</a></div>`).join("")}
+      <b style="font-family:var(--fs-serif);font-size:19px">${c[1]}</b><p class="small">${c[2]}</p>
+      ${c[1].indexOf("live chat")>-1?`<button class="link-arrow" style="font-size:11.5px" onclick="liveChatOpen()">Start chatting ${I.arrow}</button>`:`<a class="link-arrow" style="font-size:11.5px" href="${c[3]}">Open ${I.arrow}</a>`}</div>`).join("")}
     </div>
     <div class="grid-2" style="margin-top:24px">
-      <div class="panel"><h3 style="font-size:20px">${I.scale} Dispute resolution</h3>
-        <p class="muted" style="font-size:14px;margin-bottom:8px">Structured, fair and fast — most disputes resolve within 48 hours.</p>
-        ${[["1","Raise a dispute","From any booking, one tap."],["2","Both sides share evidence","Photos, messages, receipts."],["3","Fair outcome","Refunds, rebooking or mediation."]].map(s=>`<div class="krow"><span class="k"><b class="gold-text">${s[0]}</b> ${s[1]}</span><span class="v small">${s[2]}</span></div>`).join("")}
-        <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="toast('Dispute #D-4412 drafted — a mediator replies within hours','scale')">File a dispute</button>
-      </div>
+      <div id="disputeCentre">${typeof dcPanel==="function"?dcPanel():""}</div>
       <div class="panel"><h3 style="font-size:20px">${I.chatBell} Emergency assistance</h3>
         <p class="muted" style="font-size:14px;margin-bottom:10px">One-tap access, wherever you are in Nigeria.</p>
         <div class="grid-2">${[["Police","112"],["Fire","112"],["Ambulance","112"]].map(e=>`<button class="btn btn-ghost btn-sm" onclick="toast('Dialling ${e[1]}…','phone')">${e[0]} · ${e[1]}</button>`).join("")}
@@ -3530,6 +3608,8 @@ function bindHelp(){
     nav("/help?q="+encodeURIComponent(v)); });
   $("#helpSearch").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#helpGo").click(); });
   $$("#helpCats .tab").forEach(t=>t.addEventListener("click",()=>nav("/help?cat="+t.dataset.hc)));
+  /* the resolution centre is database-backed; wire it once the panel is in the DOM */
+  if (typeof bindDisputes === "function") bindDisputes();
 }
 
 /* ---------------- BUSINESS ---------------- */
@@ -3584,14 +3664,14 @@ function pAdminLogin(){
           ${JL.admin2fa?`<div class="frm-row"><label>6-digit authenticator code</label><input class="inp" id="adOtp" inputmode="numeric" placeholder="••• •••"></div>`:""}
           <button class="btn btn-gold btn-block" id="adSubmit" type="submit" style="margin-top:6px">${I.lock} Sign in to back office</button>
           <div class="btnrow" style="gap:10px;margin-top:10px">
-            <button class="btn btn-ghost" type="button" onclick="admSSO()">Okta SSO</button>
+            ${jlFlag("admin.sso")?`<button class="btn btn-ghost" type="button" onclick="admSSO()">Okta SSO</button>`:""}
             <a class="btn btn-ghost" href="${URL('/help')}?q=password">Forgot password</a>
           </div>
         </form>
         ${admIn()
           ? `<div class="ai-callout" style="margin-top:16px">${I.check}<span><b>Already signed in.</b> <a href="${URL('/admin')}" style="color:var(--accent)">Continue to the console →</a></span></div>`
           : `<div class="ai-callout" style="margin-top:16px">${I.lock}<span>Use the administrator account created during installation.</span></div>`}
-        <p class="small" style="text-align:center;margin-top:12px">${I.shield} NDPR/GDPR · 2FA enforced · sessions expire after 12 hours</p>
+        <p class="small" style="text-align:center;margin-top:12px">${I.shield} NDPR/GDPR · ${JL.admin2fa?"2FA required for staff":"2FA can be switched on for staff"} · sessions end the moment access is revoked</p>
         <div style="text-align:center;margin-top:10px"><a class="link-arrow" href="${URL('/')}">← Back to jollofliving.com</a></div>
       </div>
     </div>
@@ -3618,7 +3698,7 @@ function bindAdminLogin(){
 function pAdmin(q){
   if(!admIn()) return pAdminLogin();   // gate: back office requires sign-in
   const tab=(q&&q.tab)||"dashboard";
-  const nav=[["dashboard","Dashboard","grid"],["moderation","Listings moderation","eye"],["users","User management","users"],["promotions","Promotions & campaigns","gift"],["fraud","Fraud detection","shield"],["cms","Content (CMS)","doc"],["reports","Reports & analytics","scale"],["roles","Roles & permissions","lock"],["audit","Audit log","book"]];
+  const nav=[["dashboard","Dashboard","grid"],["moderation","Listings moderation","eye"],["users","User management","users"],["promotions","Promotions & campaigns","gift"],["fraud","Fraud detection","shield"],["chat","Live chat desk","chat"],["disputes","Dispute resolution","scale"],["cms","Content (CMS)","doc"],["reports","Reports & analytics","scale"],["roles","Roles & permissions","lock"],["audit","Audit log","book"]];
   // The header badges report real figures: GMV for the last 30 days and the
   // take rate actually configured in settings, not fixed sample numbers.
   const KH=ADMIN_STATS||{};
@@ -3635,7 +3715,7 @@ function pAdmin(q){
       <nav class="admin-nav"><div class="sec">Admin</div>
         ${nav.map(([k,l,i])=>`<a href="${URL("/admin")}?tab=${k}" class="${tab===k?"active":""}">${I[i]} ${l}</a>`).join("")}
       </nav>
-      <div>${(()=>{ const m=[["dashboard",admDashboard],["moderation",admModeration],["users",admUsers],["promotions",admPromotions],["fraud",admFraud],["cms",adCMS],["reports",admReports],["roles",admRoles],["audit",admAudit]].find(([k])=>k===tab)||["dashboard",admDashboard]; return m[1](); })()}</div>
+      <div>${(()=>{ const m=[["dashboard",admDashboard],["moderation",admModeration],["users",admUsers],["promotions",admPromotions],["fraud",admFraud],["chat",()=>`<div id="admChatHost">${admChatHostHTML()}</div>`],["disputes",()=>`<div id="admDisputeHost">${admDisputesHostHTML()}</div>`],["cms",adCMS],["reports",admReports],["roles",admRoles],["audit",admAudit]].find(([k])=>k===tab)||["dashboard",admDashboard]; return m[1](); })()}</div>
     </div>
   </div></div>`;
 }
@@ -4007,11 +4087,43 @@ function buyGiftCard(amount){
     <button class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>`);
 }
 async function submitGiftCard(amount){
-  const r=await api("giftcard.php",{action:"purchase",amount,
-    name:$("#gcName").value,email:$("#gcEmail").value,message:$("#gcMsg").value});
-  if(!r.ok){ toast(r.message||"Could not complete that purchase","x"); return; }
+  const name=($("#gcName")?.value||"").trim();
+  const email=($("#gcEmail")?.value||"").trim();
+  const message=($("#gcMsg")?.value||"").trim();
+  if(!name){ toast("Please enter the recipient's name","x"); return; }
+  if(!email){ toast("Please enter a valid recipient email","x"); return; }
+
+  const btn=document.querySelector(".modal-body button.btn-gold");
+  if(btn){ btn.disabled=true; btn.textContent="Connecting to Paystack…"; }
+
+  const r=await api("pay.php",{
+    action:"initiate",
+    kind:"giftcard",
+    amount,
+    name,
+    email,
+    message,
+    buyer_email:(USER&&USER.email)||email,
+    buyer_name:(USER&&USER.name)||name
+  });
+
+  if(!r.ok){
+    if(btn){ btn.disabled=false; btn.textContent=`Buy for ${fmt(amount)}`; }
+    toast(r.message||"Payment initialization failed","x");
+    return;
+  }
+
+  // If live gateway return URL is provided, redirect to Paystack checkout
+  if(r.data&&r.data.redirect_url){
+    closeModal();
+    toast("Redirecting to Paystack secure checkout…","lock");
+    setTimeout(()=>{ location.href=r.data.redirect_url; }, 800);
+    return;
+  }
+
+  // Auto-captured or sandbox mode
   closeModal();
-  toast(r.message||`Gift card sent — code ${r.data&&r.data.code?r.data.code:""} ✨`,"gift");
+  toast(r.message||`Payment confirmed — gift card code ${r.data&&r.data.code?r.data.code:""} issued! ✨`,"gift");
 }
 async function subscribeHelp(){
   const em=(USER&&USER.email)||prompt("Which email should we send product updates to?");
@@ -4051,6 +4163,7 @@ const PAGE_RENDER = {
   app:              () => ({ html: pApp() }),
   future:           () => ({ html: pFuture() }),
   concierge:        () => ({ html: pConcierge(qps()), bind: bindConcierge }),
+  agent:            () => ({ html: pAgent(qps()), bind: bindAgent }),
   messages:         () => ({ html: pMessages(qps()), bind: bindMessages }),
   notifications:    () => ({ html: pNotif() }),
   trips:            () => ({ html: pTrips(qps()), bind: bindTrips }),
@@ -4163,7 +4276,9 @@ $("#drawer").addEventListener("click", (e) => { if (e.target.closest("a")) close
 $("#notifBtn").addEventListener("click", () => nav("/notifications"));
 $("#msgBtn").addEventListener("click", () => nav("/messages"));
 $("#wlBtn").addEventListener("click", () => nav("/wishlist"));
-$("#chatFab").addEventListener("click", () => nav("/concierge"));
+/* The floating button opens the live chat desk. The AI concierge stays one tap
+   away inside the widget (and in the drawer). */
+$("#chatFab").addEventListener("click", () => { if (typeof liveChatOpen === "function") liveChatOpen(); else nav("/concierge"); });
 
 /* ---------------- currency ---------------- */
 const curSel = $("#currencySel");
@@ -4204,3 +4319,5 @@ function observeReveals() {
 $("#yearNow").textContent = new Date().getFullYear();
 applyTheme(store.get("theme", "dark"));
 render();
+/* the live chat desk boots behind the scenes: the widget only fetches when opened */
+if (typeof liveChatBoot === "function") liveChatBoot();

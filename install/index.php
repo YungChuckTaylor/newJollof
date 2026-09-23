@@ -55,6 +55,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !$done) {
             try {
                 $notes[] = run_sql_file($root . '/../database/schema.sql') . ' schema statements executed.';
 
+                // Module upgrades (disputes, live chat, …) live next to this
+                // installer as install/schema/*.sql. They are idempotent, so a
+                // fresh install can safely run them straight after the base
+                // schema; install/migrate.php does the same on a live site.
+                foreach (glob(__DIR__ . '/schema/*.sql') ?: [] as $moduleSql) {
+                    $count = run_sql_file($moduleSql);
+                    $notes[] = basename($moduleSql) . ' — ' . $count . ' statements executed.';
+                }
+
                 if ($withSeed) {
                     $seeded = (int) DB::value('SELECT COUNT(*) FROM properties', [], 0);
                     if ($seeded > 0) {

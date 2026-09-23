@@ -1062,3 +1062,92 @@ p svg,.small svg,.muted svg{width:14px;height:14px;flex:0 0 auto;vertical-align:
 .hd-cal-day .d{font-size:13px}
 .hd-cal-day .p{font-size:10px;color:var(--accent);white-space:nowrap}
 .hd-cal-day .s{font-size:9px}
+/* ============================================================
+   Live chat widget · agent console · dispute centre
+   (chat.js — the visitor widget on every page, /agent.php and the
+   resolution centre on /help plus the back-office tabs)
+   ============================================================ */
+
+/* ---------- floating widget ---------- */
+.cw{position:fixed;right:24px;bottom:96px;z-index:180;width:min(400px,calc(100vw - 32px));display:none}
+.cw.open{display:block;animation:cwin .3s var(--ease)}
+@keyframes cwin{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+.cw-panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r-l);box-shadow:var(--shadow-lg);overflow:hidden;display:flex;flex-direction:column;max-height:min(640px,calc(100vh - 140px))}
+.cw-head{display:flex;align-items:center;gap:11px;padding:14px 16px;background:var(--green);color:var(--green-ink)}
+.cw-head .cw-avatar{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);display:grid;place-items:center;flex-shrink:0}
+.cw-head .cw-avatar svg{width:18px;height:18px}
+.cw-id{flex:1;min-width:0}
+.cw-id b{display:block;font-size:14.5px;font-weight:500}
+.cw-id span{font-size:11.5px;opacity:.82}
+.cw-x{margin-left:auto;font-size:24px;line-height:1;color:inherit;opacity:.75;padding:0 4px}
+.cw-x:hover{opacity:1}
+.cw-body{padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:9px;min-height:180px}
+.cw-hello{font-size:14px;color:var(--ink-soft);line-height:1.55}
+.cw-lab{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-top:4px}
+.cw-deps{display:grid;gap:7px;max-height:230px;overflow-y:auto}
+.cw-dep{text-align:left;border:1px solid var(--line);border-radius:var(--r-s);padding:10px 12px;transition:.2s;background:var(--card-2)}
+.cw-dep b{display:block;font-size:13.5px;font-weight:500}
+.cw-dep span{font-size:11.5px;color:var(--ink-faint)}
+.cw-dep:hover{border-color:var(--accent)}
+.cw-dep.on{border-color:var(--accent);background:var(--gold-soft)}
+.cw-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cw-two .inp{font-size:13px;padding:10px 12px}
+.cw-note{background:var(--green-soft);border-radius:var(--r-s);padding:11px 13px;font-size:13px;color:var(--ink-soft);line-height:1.5}
+.cw-wait{text-align:center;color:var(--ink-faint);font-size:13px;padding:18px 0}
+.cw-queue{text-align:center;font-size:12.5px;color:var(--accent);background:var(--gold-soft);border-radius:999px;padding:7px 13px;align-self:center}
+.cw-sys{text-align:center;font-size:11.5px;color:var(--ink-faint);padding:4px 8px}
+.cw-typing{padding:12px 16px}
+.cw-stars{display:flex;gap:8px;justify-content:center;font-size:30px;color:var(--accent)}
+.cw-stars button{color:inherit;line-height:1;transition:.15s}
+.cw-stars button:hover{transform:scale(1.15)}
+.cw-alt{font-size:12px;color:var(--ink-faint);text-align:center;margin-top:4px}
+.cw-alt a{color:var(--accent);text-decoration:underline}
+.cw-foot{border-top:1px solid var(--line-soft);padding:10px 12px 12px;background:var(--bg-2)}
+.cw-tools{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cw-status{font-size:11px;color:var(--ink-faint)}
+.cw-send{display:flex;gap:8px;align-items:flex-end}
+.cw-send textarea{flex:1;border:1px solid var(--line);border-radius:14px;padding:10px 13px;font-size:13.5px;resize:none;min-height:42px;max-height:110px;background:var(--card);color:var(--ink);font-family:inherit;outline:none}
+.cw-send textarea:focus{border-color:var(--accent)}
+.cw-send .btn{width:44px;height:44px;padding:0;display:grid;place-items:center;border-radius:50%}
+.cw-send .btn svg{width:17px;height:17px}
+.cw-badge{position:absolute;top:-3px;right:-3px;min-width:20px;height:20px;border-radius:999px;background:var(--bad);color:#fff;font-size:11px;display:grid;place-items:center;padding:0 5px}
+@media(max-width:640px){
+  .cw{right:12px;left:12px;bottom:82px;width:auto}
+  .cw-panel{max-height:calc(100vh - 120px)}
+}
+@media print{.cw{display:none!important}}
+
+/* ---------- internal notes ---------- */
+.msg.note{background:var(--gold-soft);border:1px dashed var(--accent);align-self:center;font-size:12.5px;font-style:italic;max-width:92%}
+
+/* ---------- agent console ---------- */
+.ac-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.ac-me{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.ac-dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--ink-faint)}
+.ac-dot.online{background:var(--ok)}.ac-dot.away{background:var(--gold-2)}.ac-dot.busy{background:var(--bad)}.ac-dot.offline{background:var(--ink-faint)}
+.ac-status{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.ac-status .btn.on{border-color:var(--accent);color:var(--accent)}
+.ac-tabs{justify-content:flex-start;margin-bottom:14px}
+.ac-badge{display:flex;gap:7px;flex-wrap:wrap}
+.ac-desk .conv-list{max-height:640px;overflow-y:auto}
+.ac-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.ac-filter{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;color:var(--ink-soft);transition:.2s}
+.ac-filter b{color:var(--ink)}
+.ac-filter.on{border-color:var(--accent);color:var(--accent);background:var(--gold-soft)}
+.ac-chats{display:grid;gap:4px}
+.ac-chat{cursor:pointer}
+.ac-chat .badge{padding:1px 6px;font-size:10.5px}
+.ac-input{flex:1}
+.ac-dossier{display:flex;gap:7px;flex-wrap:wrap;padding:8px 16px 0}
+.ac-kpis{display:flex;gap:10px;flex-wrap:wrap}
+.ac-kpis .stat-kpi{min-width:110px}
+.ac-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ac-pick{display:grid;gap:7px;max-height:340px;overflow-y:auto}
+.ac-queues{display:grid;gap:6px;max-height:220px;overflow-y:auto;padding:6px 0}
+.ac-queues .chk{font-size:13.5px;display:flex;gap:8px;align-items:center}
+.ac-more{align-self:center;font-size:12px;color:var(--accent);text-decoration:underline}
+@media(max-width:900px){
+  .ac-top{flex-direction:column;align-items:flex-start}
+  .ac-status{margin-left:0}
+  .ac-desk .conv-list{max-height:260px}
+}

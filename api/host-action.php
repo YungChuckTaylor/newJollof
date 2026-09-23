@@ -296,6 +296,25 @@ switch ($action) {
         audit((string) $user['email'], 'Payout settings updated', 'ok');
         json_ok(['host' => Repo::hostState($uid)], 'Payout settings saved.');
 
+    /* ------------------------------------------- requests & approval (WP11) */
+    case 'decide-booking':
+        $ref = input_str('ref');
+        $decision = input_str('decision'); // approve | decline
+        $b = BookingService::find($ref);
+        if (!$b) {
+            json_fail('Reservation not found.', 404);
+        }
+        $ownProperty((int) $b['property_id']);
+        if (!in_array($decision, ['approve', 'decline'], true)) {
+            json_fail('Decision must be approve or decline.');
+        }
+        [$ok, $message] = BookingService::transition($ref, $decision, null);
+        if (!$ok) {
+            json_fail($message);
+        }
+        audit((string) $user['email'], "Host {$decision}ed booking {$ref}", 'ok');
+        json_ok(['host' => Repo::hostState($uid)], $message);
+
     default:
         json_fail('Unknown action.');
 }

@@ -45,19 +45,19 @@ return [
     ],
 
     // ------------------------------------------------------------ email
-    // HostGator: use the mail() function or an SMTP account created in cPanel
+    // Set method to 'smtp' to use an authenticated cPanel or external mailbox.
     'mail' => [
         'enabled'    => true,
-        'method'     => 'mail',                       // 'mail' | 'smtp'
-        'from_email' => 'no-reply@jollofliving.com',
+        'method'     => 'smtp',                       // 'smtp' | 'mail'
+        'from_email' => 'no-reply@jollofliving.com',  // or your authenticated SMTP email address
         'from_name'  => 'Jollof Living',
         'admin_to'   => 'reservations@jollofliving.com',
         'smtp' => [
-            'host' => 'mail.jollofliving.com',
-            'port' => 465,
-            'user' => '',
-            'pass' => '',
-            'secure' => 'ssl',
+            'host' => 'mail.jollofliving.com',        // e.g. mail.yourdomain.com or server host
+            'port' => 465,                            // 465 (SSL) or 587 (TLS)
+            'user' => '',                             // full email address (e.g. info@yourdomain.com)
+            'pass' => '',                             // email password
+            'secure' => 'ssl',                        // 'ssl' (port 465) or 'tls' (port 587)
         ],
     ],
 
@@ -65,7 +65,7 @@ return [
     // Bookings are recorded in the database; no charge is attempted unless
     // a gateway is enabled and keys are supplied.
     'payments' => [
-        'mode'    => 'record_only',   // 'record_only' | 'paystack' | 'flutterwave'
+        'mode'    => 'paystack',      // 'paystack' | 'record_only' | 'flutterwave'
         'paystack' => [
             'public_key' => '',
             'secret_key' => '',
