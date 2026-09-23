@@ -89,6 +89,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-8 platform reach (WP32-WP37): business_leads, push_subscriptions
+        foreach (ensure_phase8_platform_reach() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -1175,6 +1180,97 @@ function ensure_phase7_support_modules(): array
         }
     } catch (Throwable $e) {
         $lines[] = 'dispute_ratings setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
+
+/**
+ * Phase-8 platform reach & polish schema (WP32-WP37).
+ *
+ *  • business_leads — corporate travel requests and demo intake;
+ *  • push_subscriptions — web push notification subscriber registries.
+ *
+ * @return string[]
+ */
+function ensure_phase8_platform_reach(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('business_leads')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS business_leads (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NULL,
+                    company_name VARCHAR(160) NOT NULL,
+                    contact_name VARCHAR(120) NOT NULL,
+                    contact_email VARCHAR(190) NOT NULL,
+                    contact_phone VARCHAR(40) NULL,
+                    team_size VARCHAR(32) NULL,
+                    city VARCHAR(80) NULL,
+                    requirements TEXT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "new",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS business_leads (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED DEFAULT NULL,
+                    company_name VARCHAR(160) NOT NULL,
+                    contact_name VARCHAR(120) NOT NULL,
+                    contact_email VARCHAR(190) NOT NULL,
+                    contact_phone VARCHAR(40) DEFAULT NULL,
+                    team_size VARCHAR(32) DEFAULT NULL,
+                    city VARCHAR(80) DEFAULT NULL,
+                    requirements TEXT DEFAULT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "new",
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_lead_email (contact_email),
+                    KEY ix_lead_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'business_leads created (WP36 corporate services).';
+        } else {
+            $lines[] = 'business_leads already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'business_leads setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('push_subscriptions')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    endpoint TEXT NOT NULL,
+                    p256dh VARCHAR(255) NOT NULL,
+                    auth VARCHAR(255) NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    endpoint TEXT NOT NULL,
+                    p256dh VARCHAR(255) NOT NULL,
+                    auth VARCHAR(255) NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_push_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'push_subscriptions created (WP34 web push platform).';
+        } else {
+            $lines[] = 'push_subscriptions already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'push_subscriptions setup error: ' . $e->getMessage();
     }
 
     return $lines;
