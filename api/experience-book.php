@@ -22,7 +22,13 @@ if ($name === '')      json_fail('Please tell us your name.');
 if (!is_email($email)) json_fail('Please enter a valid email address.');
 
 $date = input_str('date');
+if ($date !== '' && $date < date('Y-m-d')) {
+    json_fail('Experience date cannot be in the past (WP26).', 422);
+}
 $guests = max(1, input_int('guests', 2));
+if ($guests > 20) {
+    json_fail('Experience capacity exceeded — please contact concierge for private group charters.', 422);
+}
 
 DB::insert('enquiries', [
     'kind'    => 'experience',

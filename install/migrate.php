@@ -74,6 +74,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-5 owner workspace (WP23-WP26): listing_drafts, host_invitations, templates, services
+        foreach (ensure_phase5_owner_workspace() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -812,6 +817,168 @@ function ensure_phase3_trust_identity(): array
         }
     } catch (Throwable $e) {
         $lines[] = 'safety tables setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
+
+/**
+ * Phase-5 owner workspace & host operations schema (WP23-WP26).
+ *
+ *  • listing_drafts — field-by-field draft persistence and version guards;
+ *  • host_invitations — co-host tokenized invites and capability scoping;
+ *  • template_sends — automated guest message delivery tracking and deduplication;
+ *  • service_requests — host requests for inspection, photography and 3D tours.
+ *
+ * @return string[]
+ */
+function ensure_phase5_owner_workspace(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('listing_drafts')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS listing_drafts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    listing_id INTEGER NULL,
+                    payload TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS listing_drafts (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    listing_id INT(10) UNSIGNED DEFAULT NULL,
+                    payload TEXT NOT NULL,
+                    version INT(11) NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_draft_user (user_id),
+                    KEY ix_draft_listing (listing_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'listing_drafts created (WP23 listing pipeline).';
+        } else {
+            $lines[] = 'listing_drafts already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'listing_drafts setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('host_invitations')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS host_invitations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    host_id INTEGER NOT NULL,
+                    property_id INTEGER NULL,
+                    email VARCHAR(190) NOT NULL,
+                    capability VARCHAR(64) NOT NULL DEFAULT "cohost_manage",
+                    token VARCHAR(64) NOT NULL UNIQUE,
+                    status VARCHAR(32) NOT NULL DEFAULT "pending",
+                    expires_at DATETIME NOT NULL,
+                    accepted_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS host_invitations (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    host_id INT(10) UNSIGNED NOT NULL,
+                    property_id INT(10) UNSIGNED DEFAULT NULL,
+                    email VARCHAR(190) NOT NULL,
+                    capability VARCHAR(64) NOT NULL DEFAULT "cohost_manage",
+                    token VARCHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "pending",
+                    expires_at DATETIME NOT NULL,
+                    accepted_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_host_inv_token (token),
+                    KEY ix_host_inv_host (host_id),
+                    KEY ix_host_inv_email (email)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'host_invitations created (WP24 co-host team).';
+        } else {
+            $lines[] = 'host_invitations already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'host_invitations setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('template_sends')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS template_sends (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    template_id INTEGER NOT NULL,
+                    booking_id INTEGER NOT NULL,
+                    sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (template_id, booking_id)
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS template_sends (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    template_id INT(10) UNSIGNED NOT NULL,
+                    booking_id BIGINT(20) UNSIGNED NOT NULL,
+                    sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_template_booking (template_id, booking_id),
+                    KEY ix_tmpl_send_booking (booking_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'template_sends created (WP24 automation deduplication).';
+        } else {
+            $lines[] = 'template_sends already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'template_sends setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('service_requests')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS service_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    host_id INTEGER NOT NULL,
+                    property_id INTEGER NULL,
+                    kind VARCHAR(32) NOT NULL,
+                    preferred_date DATE NULL,
+                    notes TEXT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "requested",
+                    assigned_vendor VARCHAR(120) NULL,
+                    scheduled_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS service_requests (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    host_id INT(10) UNSIGNED NOT NULL,
+                    property_id INT(10) UNSIGNED DEFAULT NULL,
+                    kind VARCHAR(32) NOT NULL,
+                    preferred_date DATE DEFAULT NULL,
+                    notes TEXT DEFAULT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT "requested",
+                    assigned_vendor VARCHAR(120) DEFAULT NULL,
+                    scheduled_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_srv_host (host_id),
+                    KEY ix_srv_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'service_requests created (WP26 vendor board).';
+        } else {
+            $lines[] = 'service_requests already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'service_requests setup error: ' . $e->getMessage();
     }
 
     return $lines;

@@ -2678,7 +2678,7 @@ function wizPolicy(){
         <div class="krow"><span class="k">Payout schedule</span><span class="v">Weekly, automatic</span></div>
         <div class="krow"><span class="k">Withholding tax (WHT)</span><span class="v">Auto-computed &amp; filed</span></div>
         <div class="krow"><span class="k">Damage protection</span><span class="v">Included up to ₦2m</span></div>
-        <div class="krow"><span class="k">Escrow release</span><span class="v">After guest check-in</span></div>
+        <div class="krow"><span class="k">Escrow release</span><span class="v">After guest check-out</span></div>
       </div>
     </div>
     <div class="wizard-foot"><button class="btn btn-ghost" onclick="wizBack()">← Back</button><button class="btn btn-gold" id="wizNext">Save &amp; continue</button></div>
