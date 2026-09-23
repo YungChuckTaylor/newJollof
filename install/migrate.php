@@ -84,6 +84,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-7 support modules (WP28-WP31): dispute_case_tokens, dispute_ratings
+        foreach (ensure_phase7_support_modules() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -1084,6 +1089,92 @@ function ensure_phase6_back_office(): array
         }
     } catch (Throwable $e) {
         $lines[] = 'fraud_signals setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
+
+/**
+ * Phase-7 support modules finished schema (WP28-WP31).
+ *
+ *  • dispute_case_tokens — shareable case access links with expiration and revocation;
+ *  • dispute_ratings — multi-party resolution ratings preventing overwrite races.
+ *
+ * @return string[]
+ */
+function ensure_phase7_support_modules(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('dispute_case_tokens')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS dispute_case_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dispute_id INTEGER NOT NULL,
+                    token VARCHAR(64) NOT NULL UNIQUE,
+                    issued_to_email VARCHAR(190) NULL,
+                    single_use INTEGER NOT NULL DEFAULT 0,
+                    expires_at DATETIME NOT NULL,
+                    revoked_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS dispute_case_tokens (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    dispute_id INT(10) UNSIGNED NOT NULL,
+                    token VARCHAR(64) NOT NULL,
+                    issued_to_email VARCHAR(190) DEFAULT NULL,
+                    single_use TINYINT(1) NOT NULL DEFAULT 0,
+                    expires_at DATETIME NOT NULL,
+                    revoked_at DATETIME DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_case_token (token),
+                    KEY ix_token_dispute (dispute_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'dispute_case_tokens created (WP30 shareable case links).';
+        } else {
+            $lines[] = 'dispute_case_tokens already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'dispute_case_tokens setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('dispute_ratings')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS dispute_ratings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dispute_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    role VARCHAR(20) NOT NULL DEFAULT "guest",
+                    stars INTEGER NOT NULL,
+                    comment TEXT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (dispute_id, user_id)
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS dispute_ratings (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    dispute_id INT(10) UNSIGNED NOT NULL,
+                    user_id INT(10) UNSIGNED NOT NULL,
+                    role VARCHAR(20) NOT NULL DEFAULT "guest",
+                    stars TINYINT(4) NOT NULL,
+                    comment TEXT DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_dispute_user_rating (dispute_id, user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'dispute_ratings created (WP30 party-scoped satisfaction ratings).';
+        } else {
+            $lines[] = 'dispute_ratings already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'dispute_ratings setup error: ' . $e->getMessage();
     }
 
     return $lines;

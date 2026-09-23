@@ -769,6 +769,25 @@ final class DisputeService
             'satisfaction_note' => mb_substr(trim($comment), 0, 255),
             'updated_at'        => date('Y-m-d H:i:s'),
         ], 'id = ?', [(int) $d['id']]);
+
+        // Phase 7 (WP30.2, D23): Store in dispute_ratings table keyed by (dispute_id, user_id)
+        if (DB::tableExists('dispute_ratings') && !empty($actor['id'])) {
+            $existsRating = DB::value('SELECT id FROM dispute_ratings WHERE dispute_id = ? AND user_id = ?', [(int) $d['id'], (int) $actor['id']]);
+            if ($existsRating) {
+                DB::update('dispute_ratings', [
+                    'stars'   => $stars,
+                    'comment' => mb_substr(trim($comment), 0, 1000),
+                ], 'id = ?', [(int) $existsRating]);
+            } else {
+                DB::insert('dispute_ratings', [
+                    'dispute_id' => (int) $d['id'],
+                    'user_id'    => (int) $actor['id'],
+                    'role'       => (string) ($actor['role'] ?? 'guest'),
+                    'stars'      => $stars,
+                    'comment'    => mb_substr(trim($comment), 0, 1000),
+                ]);
+            }
+        }
         self::event((int) $d['id'], 'note', 'guest', (int) ($actor['id'] ?? 0), (string) ($actor['name'] ?? 'Guest'),
             'Rated the resolution ' . $stars . '/5' . ($comment !== '' ? ' — ' . $comment : ''), '', '', 'staff');
         Repo::flush();
