@@ -59,6 +59,22 @@ if (!$ok) {
     json_fail($message, 401);
 }
 
+/* Administrator accounts clear the second factor here too — this login form
+   and the admin console share the rule, so "require 2FA" cannot be sidestepped
+   by choosing the other sign-in page (A13). */
+if (($u['role'] ?? '') === 'admin' && Auth::adminFactorRequired()) {
+    $otp = input_str('otp');
+    if ($otp === '') {
+        Auth::logout();
+        json_fail('Administrator sign-in needs the authentication code. Enter it below, or use the admin console.', 401, ['needsOtp' => true]);
+    }
+    if (!Auth::checkAdminOtp($otp)) {
+        Auth::logout();
+        audit($email, 'Admin 2FA failed (site sign-in)', 'bad');
+        json_fail('That authentication code is not valid.', 401, ['needsOtp' => true]);
+    }
+}
+
 Repo::ensureConversations((int) $u['id']);
 audit($email, 'Signed in', 'ok');
 

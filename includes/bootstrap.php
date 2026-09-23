@@ -65,6 +65,9 @@ require_once JL_INC . '/helpers.php';
 require_once JL_INC . '/auth.php';
 require_once JL_INC . '/repo.php';
 require_once JL_INC . '/pricing.php';
+require_once JL_INC . '/payments.php';
+require_once JL_INC . '/ledger.php';
+require_once JL_INC . '/cancellations.php';
 require_once JL_INC . '/mailer.php';
 require_once JL_INC . '/concierge.php';
 

@@ -158,6 +158,28 @@ final class DB
         }
     }
 
+    /** Column probe for both drivers — used by idempotent schema repairs. */
+    public static function columnExists(string $table, string $column): bool
+    {
+        try {
+            if (self::isSqlite()) {
+                foreach (self::all('PRAGMA table_info(' . $table . ')') as $c) {
+                    if (strcasecmp((string) ($c['name'] ?? ''), $column) === 0) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            return (bool) self::value(
+                'SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+                [$table, $column]
+            );
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
     public static function begin(): void  { self::pdo()->beginTransaction(); }
     public static function commit(): void { self::pdo()->commit(); }
     public static function rollback(): void

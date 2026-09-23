@@ -65,7 +65,7 @@ return [
     // Bookings are recorded in the database; no charge is attempted unless
     // a gateway is enabled and keys are supplied.
     'payments' => [
-        'mode'    => 'record_only',   // 'record_only' | 'paystack' | 'flutterwave'
+        'mode'    => 'paystack',      // 'paystack' | 'record_only' | 'flutterwave'
         'paystack' => [
             'public_key' => '',
             'secret_key' => '',

@@ -107,7 +107,13 @@ final class MobileAuth
             return self::$cached = null;
         }
         $u = DB::row('SELECT * FROM users WHERE id = ?', [(int) $row['user_id']]);
-        if (!$u || ($u['status_level'] ?? 'ok') === 'bad') {
+        /* One account state everywhere (U04): a suspended, banned or erased
+           member loses API access on the very next call — same rule, same
+           columns, as the website. The offending token is revoked on the spot. */
+        if (!$u || Auth::isBlocked($u)) {
+            if ($u) {
+                DB::run('UPDATE api_tokens SET revoked = 1 WHERE user_id = ?', [(int) $u['id']]);
+            }
             return self::$cached = null;
         }
         try {
@@ -120,6 +126,8 @@ final class MobileAuth
         // Priming it lets every website service run unchanged for app requests.
         $_SESSION['uid'] = (int) $u['id'];
         $_SESSION['is_admin'] = ($u['role'] ?? '') === 'admin';
+        // …and they must survive the auth_version check inside Auth::user().
+        $_SESSION['av'] = (int) ($u['auth_version'] ?? 0);
 
         return self::$cached = $u;
     }

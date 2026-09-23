@@ -54,7 +54,8 @@ if ($do === 'booking-create') {
         'method'   => input_str('method', 'card'),
         'addons'   => (array) input('addons', []),
         'promo'    => input_str('promo'),
-        'gift'     => input_int('gift', 0),
+        // card CODE only — the server reads the balance (never a client-typed amount)
+        'giftCode' => strtoupper(trim(input_str('gift_code'))),
         'split'    => input_bool('split'),
         'request'  => input_bool('request'),
         'name'     => input_str('name'),
@@ -110,12 +111,14 @@ if ($do === 'quote') {
     if ($nights < 1) {
         json_fail('Please choose a check-out date after your check-in.');
     }
+    /* Quote previews show the list price; gift-card credit is applied (and
+       verified against the card's balance) only when the booking is created —
+       a quote can never promise money the card may not have. */
     mobile_ok(Pricing::quote(
         $prop,
         $nights,
         (array) input('addons', []),
-        input_str('promo'),
-        input_int('gift', 0)
+        input_str('promo')
     ));
 }
 

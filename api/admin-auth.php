@@ -29,13 +29,22 @@ if (!Auth::isAdmin()) {
     json_fail('That account does not have administrator access.', 403);
 }
 
-if (config('security.admin_2fa_required')) {
-    $otp = preg_replace('~\D~', '', input_str('otp'));
-    $expected = (string) config('security.admin_otp', '');
-    if ($expected !== '' && !hash_equals($expected, (string) $otp)) {
+/* One rulebook with the ordinary sign-in form (api/auth.php): when the
+   requirement is on, no admin gets in through any path without the code. */
+if (Auth::adminFactorRequired()) {
+    $otp = input_str('otp');
+    if ((string) config('security.admin_otp', '') === '') {
+        Auth::logout();
+        json_fail('Administrator two-factor is enabled but no code is configured — ask whoever manages this deployment to set security.admin_otp.', 503);
+    }
+    if ($otp === '') {
+        Auth::logout();
+        json_fail('Enter the administrator authentication code.', 401, ['needsOtp' => true]);
+    }
+    if (!Auth::checkAdminOtp($otp)) {
         Auth::logout();
         audit($email, 'Admin 2FA failed', 'bad');
-        json_fail('That authentication code is not valid.', 401);
+        json_fail('That authentication code is not valid.', 401, ['needsOtp' => true]);
     }
 }
 

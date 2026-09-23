@@ -24,11 +24,12 @@ if ($action === 'pref') {
     if ($key === '') json_fail('Unknown preference.');
     $on = input_bool('value');
 
+    $val = $on ? '1' : '0';
     $existing = DB::row('SELECT id FROM user_prefs WHERE user_id = ? AND pref_key = ?', [$uid, $key]);
     if ($existing) {
-        DB::update('user_prefs', ['pref_value' => $on ? '1' : '0'], 'id = ?', [(int) $existing['id']]);
+        DB::update('user_prefs', ['pref_val' => $val, 'updated_at' => date('Y-m-d H:i:s')], 'id = ?', [(int) $existing['id']]);
     } else {
-        DB::insert('user_prefs', ['user_id' => $uid, 'pref_key' => $key, 'pref_value' => $on ? '1' : '0']);
+        DB::insert('user_prefs', ['user_id' => $uid, 'pref_key' => $key, 'pref_val' => $val]);
     }
     json_ok([], 'Preference saved');
 }
