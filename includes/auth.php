@@ -125,20 +125,98 @@ final class Auth
         return self::id() !== null;
     }
 
+    /** Per-request user cache (class-level so revocations can clear it). */
+    private static ?array $userCache = null;
+    private static int $userCacheId = -1;
+
     /** The signed-in user row, or null. */
     public static function user(): ?array
     {
-        static $cache = null;
-        static $cachedId = -1;
         $id = self::id();
         if ($id === null) {
             return null;
         }
-        if ($cachedId === $id) {
-            return $cache;
+        if (self::$userCacheId === $id) {
+            return self::$userCache;
         }
-        $cachedId = $id;
-        return $cache = DB::row('SELECT * FROM users WHERE id = ?', [$id]);
+        $row = DB::row('SELECT * FROM users WHERE id = ?', [$id]);
+        self::$userCacheId = $id;
+        if (!$row) {
+            return self::$userCache = null;
+        }
+        /* Session invalidation: suspension, password changes and admin
+           actions bump auth_version; every session stamped with an older
+           version stops being a session immediately (R7: not just hidden UI). */
+        if (isset($row['auth_version'])) {
+            $stamp = (int) ($row['auth_version']);
+            if (($stamp > 0 || isset($_SESSION['av'])) && (int) ($_SESSION['av'] ?? -1) !== $stamp) {
+                unset($_SESSION['uid'], $_SESSION['admin']);
+                self::$userCacheId = -1;
+                return self::$userCache = null;
+            }
+        }
+        if (self::isBlocked($row)) {
+            unset($_SESSION['uid'], $_SESSION['admin']);
+            self::$userCacheId = -1;
+            return self::$userCache = null;
+        }
+        return self::$userCache = $row;
+    }
+
+    /** True when the account state forbids sign-in and API use. */
+    public static function isBlocked(array $u): bool
+    {
+        if (in_array(strtolower((string) ($u['status'] ?? '')), ['suspended', 'banned', 'disabled', 'erased'], true)) {
+            return true;
+        }
+        return in_array(strtolower((string) ($u['status_level'] ?? 'ok')), ['bad', 'suspended', 'banned'], true);
+    }
+
+    /**
+     * Force every existing session and mobile token for a user to die.
+     * Bumps the session stamp and revokes bearer tokens; safe to call
+     * whether or not the hardening migration has run.
+     */
+    public static function revokeSessions(int $userId): void
+    {
+        try {
+            if (DB::columnExists('users', 'auth_version')) {
+                DB::run('UPDATE users SET auth_version = auth_version + 1 WHERE id = ?', [$userId]);
+            }
+        } catch (Throwable $e) {
+        }
+        try {
+            DB::run('UPDATE api_tokens SET revoked = 1 WHERE user_id = ?', [$userId]);
+        } catch (Throwable $e) {
+        }
+        self::flushCache();
+    }
+
+    /**
+     * Same revocation sweep, but the *current* browser session survives —
+     * used when a member changes their own password (kill thieves, keep self).
+     */
+    public static function revokeOtherSessions(int $userId): void
+    {
+        try {
+            if (DB::columnExists('users', 'auth_version')) {
+                DB::run('UPDATE users SET auth_version = auth_version + 1 WHERE id = ?', [$userId]);
+                $_SESSION['av'] = (int) DB::value('SELECT auth_version FROM users WHERE id = ?', [$userId], 0);
+            }
+        } catch (Throwable $e) {
+        }
+        try {
+            DB::run('UPDATE api_tokens SET revoked = 1 WHERE user_id = ?', [$userId]);
+        } catch (Throwable $e) {
+        }
+        self::flushCache();
+    }
+
+    /** Drop the per-request user cache (tests, long scripts, revocations). */
+    public static function flushCache(): void
+    {
+        self::$userCache = null;
+        self::$userCacheId = -1;
     }
 
     /** Display name used across the chrome. */
@@ -148,7 +226,7 @@ final class Auth
         return $u ? (string) $u['name'] : 'Guest';
     }
 
-    public static function login(int $userId, bool $isAdmin = false): void
+    public static function login(int $userId, bool $isAdmin = false, ?array $row = null): void
     {
         session_regenerate_id(true);
         $_SESSION['uid'] = $userId;
@@ -156,6 +234,15 @@ final class Auth
         if ($isAdmin) {
             $_SESSION['admin'] = 1;
         }
+        /* Stamp the session with the account's current auth_version so
+           Auth::revokeSessions() (suspend / pause agent / password change)
+           can kill it on the very next request. */
+        $av = $row !== null && isset($row['auth_version'])
+            ? (int) $row['auth_version']
+            : (DB::columnExists('users', 'auth_version')
+                ? (int) DB::value('SELECT auth_version FROM users WHERE id = ?', [$userId], 0)
+                : 0);
+        $_SESSION['av'] = $av;
         DB::update('users', ['last_login_at' => date('Y-m-d H:i:s')], 'id = :id', ['id' => $userId]);
     }
 
@@ -228,11 +315,28 @@ final class Auth
         if (!$ok) {
             return [false, 'Those details do not match our records.', null];
         }
-        if (($u['status_level'] ?? 'ok') === 'bad') {
+        if (self::isBlocked($u)) {
             return [false, 'This account is suspended. Please contact support.', null];
         }
-        self::login((int) $u['id'], ($u['role'] ?? '') === 'admin');
+        self::login((int) $u['id'], ($u['role'] ?? '') === 'admin', $u);
         return [true, 'Welcome back.', $u];
+    }
+
+    /** True when the deployment insists admins clear a second factor. */
+    public static function adminFactorRequired(): bool
+    {
+        return (bool) config('security.admin_2fa_required', false);
+    }
+
+    /**
+     * Validate the shared admin code (constant-time). Fails closed: when the
+     * requirement is switched on but no code was configured, nobody passes.
+     */
+    public static function checkAdminOtp(string $otp): bool
+    {
+        $expected = (string) config('security.admin_otp', '');
+        $given = preg_replace('~\D~', '', $otp) ?? '';
+        return $expected !== '' && $given !== '' && hash_equals($expected, $given);
     }
 
     private static function recordAttempt(string $identifier, bool $success): void

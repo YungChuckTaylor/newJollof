@@ -30,7 +30,8 @@ if ($action === 'purchase') {
 
     $message = mb_substr(input_str('message'), 0, 500);
 
-    DB::insert('gift_cards', [
+    $amountFen = $amount * 100;
+    $cardId = DB::insert('gift_cards', [
         'code'      => $code,
         'amount'    => $amount,
         'balance'   => $amount,
@@ -40,12 +41,20 @@ if ($action === 'purchase') {
         'status'    => 'active',
     ]);
 
-    Mailer::send($email, 'You have a Jollof Living gift card',
-        '<h2 style="margin:0 0 12px;font-size:20px">A gift from ' . e((string) $user['name']) . '</h2>'
-        . ($message ? '<p style="font-style:italic">“' . nl2br(e($message)) . '”</p>' : '')
-        . '<p>Your gift card is worth <b>' . e(money($amount)) . '</b>.</p>'
-        . '<p style="font-size:22px;letter-spacing:.2em;font-weight:700">' . e($code) . '</p>'
-        . '<p>Enter it at checkout on any residence. The balance never expires.</p>');
+    // Phase 1 (WP07): Post funded double-entry ledger entry (guest cash -> gift liability)
+    Ledger::postTransaction([
+        ['account' => Ledger::ACCT_GUEST_CASH,     'direction' => 'debit',  'amount_fen' => $amountFen],
+        ['account' => Ledger::ACCT_GIFT_LIABILITY, 'direction' => 'credit', 'amount_fen' => $amountFen],
+    ], 'giftcard_purchase', $code, null, (int) ($user['id'] ?? 0), 'Funded purchase of digital gift card ' . $code);
+
+    Mailer::sendGiftCard(
+        $email,
+        input_str('recipient_name') ?: $email,
+        (string) ($user['name'] ?? 'A member of Jollof Living'),
+        $code,
+        $amount,
+        $message
+    );
 
     Repo::notify((int) $user['id'], 'Gift card sent ✨',
         money($amount) . ' gift card sent to ' . $email . ' (' . $code . ').', 'gift');
