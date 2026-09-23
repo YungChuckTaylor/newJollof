@@ -1,58 +1,63 @@
 /* -------------------------------------------------------------
-       INTERACTIVE EXPERIENCE LAB SCRIPT
-    -------------------------------------------------------------- */
-    const scenes = {
-      welcome: {
-        title: "The Grand Salon · Ikoyi Penthouse",
-        desc: "Biometric access recognized. Keyway locked. Motorized sheer drapes parted for skyline view. Dual inverter air conditioning maintains 21°C.",
-        tag: "ARRIVE HOME SCENE ACTIVE",
-        power: "840 Watts",
-        temp: "21.0 °C",
-        kelvin: "2700 K",
-        security: "ARMED (STAY)",
-        glow: "radial-gradient(circle at 60% 40%, rgba(244, 236, 220, 0.45), transparent 70%)",
-        devices: { lock: true, light: true, climate: true, shades: true }
-      },
-      cinema: {
-        title: "Private Screening Salon · Villa Eko",
-        desc: "Blackout shades lowered. Architectural downlights gently dimmed to 10% warm amber. Dolby Atmos receiver engaged with silent low-fan HVAC.",
-        tag: "CINEMA & SOIREE MODE ACTIVE",
-        power: "620 Watts",
-        temp: "19.5 °C",
-        kelvin: "2000 K",
-        security: "PERIMETER LOCKED",
-        glow: "radial-gradient(circle at 50% 50%, rgba(194, 156, 75, 0.25), transparent 75%)",
-        devices: { lock: true, light: true, climate: true, shades: false }
-      },
-      power: {
-        title: "Autonomous Load-Shedding · Maitama Villa",
-        desc: "PHCN grid collapse detected. Seamless sub-10ms inverter switchover. Non-essential high-inductive water heaters automatically shed.",
-        tag: "SOLAR / INVERTER BRIDGE ENGAGED",
-        power: "310 Watts",
-        temp: "22.5 °C",
-        kelvin: "4000 K",
-        security: "ARMED (BATTERY)",
-        glow: "radial-gradient(circle at 40% 60%, rgba(26, 103, 68, 0.35), transparent 70%)",
-        devices: { lock: true, light: true, climate: false, shades: true }
-      },
-      turnover: {
-        title: "Turnover Protocol · Jollof Short-Let",
-        desc: "Guest departure confirmed via lock sensor. Check-out PIN terminated. Climate switched to 26°C eco-standby. Cleaning task dispatched to host dashboard.",
-        tag: "HOSPITALITY TURNOVER SYNC",
-        power: "140 Watts",
-        temp: "26.0 °C",
-        kelvin: "5000 K",
-        security: "READY FOR GUEST",
-        glow: "radial-gradient(circle at 50% 50%, rgba(27, 82, 136, 0.3), transparent 70%)",
-        devices: { lock: true, light: false, climate: false, shades: false }
-      }
-    };
+   INTERACTIVE EXPERIENCE LAB SCRIPT
+-------------------------------------------------------------- */
+const fallbackScenes = {
+  welcome: {
+    title: "The Grand Salon · Ikoyi Penthouse",
+    desc: "Biometric access recognized. Keyway locked. Motorized sheer drapes parted for skyline view. Dual inverter air conditioning maintains 21°C.",
+    tag: "ARRIVE HOME SCENE ACTIVE",
+    power: "840 Watts",
+    temp: "21.0 °C",
+    kelvin: "2700 K",
+    security: "ARMED (STAY)",
+    glow: "radial-gradient(circle at 60% 40%, rgba(244, 236, 220, 0.45), transparent 70%)",
+    devices: { lock: true, light: true, climate: true, shades: true }
+  },
+  cinema: {
+    title: "Private Screening Salon · Villa Eko",
+    desc: "Blackout shades lowered. Architectural downlights gently dimmed to 10% warm amber. Dolby Atmos receiver engaged with silent low-fan HVAC.",
+    tag: "CINEMA & SOIREE MODE ACTIVE",
+    power: "620 Watts",
+    temp: "19.5 °C",
+    kelvin: "2000 K",
+    security: "PERIMETER LOCKED",
+    glow: "radial-gradient(circle at 50% 50%, rgba(194, 156, 75, 0.25), transparent 75%)",
+    devices: { lock: true, light: true, climate: true, shades: false }
+  },
+  power: {
+    title: "Autonomous Load-Shedding · Maitama Villa",
+    desc: "PHCN grid collapse detected. Seamless sub-10ms inverter switchover. Non-essential high-inductive water heaters automatically shed.",
+    tag: "SOLAR / INVERTER BRIDGE ENGAGED",
+    power: "310 Watts",
+    temp: "22.5 °C",
+    kelvin: "4000 K",
+    security: "ARMED (BATTERY)",
+    glow: "radial-gradient(circle at 40% 60%, rgba(26, 103, 68, 0.35), transparent 70%)",
+    devices: { lock: true, light: true, climate: false, shades: true }
+  },
+  turnover: {
+    title: "Turnover Protocol · Jollof Short-Let",
+    desc: "Guest departure confirmed via lock sensor. Check-out PIN terminated. Climate switched to 26°C eco-standby. Cleaning task dispatched to host dashboard.",
+    tag: "HOSPITALITY TURNOVER SYNC",
+    power: "140 Watts",
+    temp: "26.0 °C",
+    kelvin: "5000 K",
+    security: "READY FOR GUEST",
+    glow: "radial-gradient(circle at 50% 50%, rgba(27, 82, 136, 0.3), transparent 70%)",
+    devices: { lock: true, light: false, climate: false, shades: false }
+  }
+};
+
+const getScenes = () => (window.JA_SCENES && Object.keys(window.JA_SCENES).length > 0) ? window.JA_SCENES : fallbackScenes;
 
     function activateScene(key) {
-      document.querySelectorAll('.scene-btn').forEach(btn => btn.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+  document.querySelectorAll('.scene-btn').forEach(btn => btn.classList.remove('active'));
+  if (window.event && window.event.currentTarget) {
+    window.event.currentTarget.classList.add('active');
+  }
 
-      const s = scenes[key];
+  const s = getScenes()[key];
+  if (!s) return;
       document.getElementById('sim-title').textContent = s.title;
       document.getElementById('sim-desc').textContent = s.desc;
       document.getElementById('sim-mode-name').textContent = s.tag;

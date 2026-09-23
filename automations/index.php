@@ -5,7 +5,13 @@
  */
 declare(strict_types=1);
 
-$htmlFile = __DIR__ . '/index.html';
+$phpIndex = dirname(__DIR__) . '/jollof-automations/index.php';
+if (file_exists($phpIndex)) {
+    require $phpIndex;
+    exit;
+}
+
+$htmlFile = dirname(__DIR__) . '/jollof-automations/index.html';
 if (file_exists($htmlFile)) {
     readfile($htmlFile);
     exit;
