@@ -50,11 +50,11 @@ require_once __DIR__ . '/includes/header.php';
       </p>
 
       <div class="hero-cta-group">
-        <a href="#survey" class="btn-corp btn-corp-primary">
+        <a href="book-survey.php" class="btn-corp btn-corp-primary">
           <span>Book an On-Site Survey</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
-        <a href="#estimator" class="btn-corp btn-corp-outline">
+        <a href="estimator.php" class="btn-corp btn-corp-outline">
           <span>Explore Cost Estimator</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </a>
@@ -200,6 +200,11 @@ require_once __DIR__ . '/includes/header.php';
         <p class="section-sub">
           Certified smart home conversion that blends with high-end African residential architecture without disruptive rewiring.
         </p>
+        <div style="margin-top:16px;">
+          <a href="solutions.php" class="corp-tag" style="background:var(--paper);border:1px solid var(--line);color:var(--forest);text-decoration:none;font-weight:700;padding:6px 14px;">
+            Explore All 6 Detailed Solutions &amp; Schematics →
+          </a>
+        </div>
       </div>
 
       <div class="solutions-grid">
@@ -294,10 +299,10 @@ require_once __DIR__ . '/includes/header.php';
             <div class="calc-total" id="calc-total-amt">₦14,300,000</div>
             <div class="calc-savings" id="calc-savings">Estimated Diesel &amp; Power Savings: ₦715,000 / month</div>
           </div>
-          <button type="button" class="btn-corp btn-corp-primary" onclick="applyEstimateToSurvey()">
+          <a href="book-survey.php" class="btn-corp btn-corp-primary" onclick="proceedFromHomeEstimator(event)">
             <span>Apply to Site Survey Booking</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
+          </a>
         </div>
       </div>
     </div>
@@ -312,6 +317,11 @@ require_once __DIR__ . '/includes/header.php';
         <p class="section-sub">
           How prominent Nigerian homeowners and portfolio operators elevated luxury, slashed diesel overhead, and attained total peace of mind.
         </p>
+        <div style="margin-top:16px;">
+          <a href="case-studies.php" class="corp-tag" style="background:var(--paper);border:1px solid var(--line);color:var(--forest);text-decoration:none;font-weight:700;padding:6px 14px;">
+            View In-Depth Case Studies &amp; ROI Reports →
+          </a>
+        </div>
       </div>
 
       <div class="cases-grid">
@@ -348,6 +358,11 @@ require_once __DIR__ . '/includes/header.php';
         <p class="section-sub">
           Enterprise rigor adapted for private luxury living. Clean, non-destructive retrofit executed by certified systems engineers.
         </p>
+        <div style="margin-top:16px;">
+          <a href="process.php" class="corp-tag" style="background:var(--paper);border:1px solid var(--line);color:var(--forest);text-decoration:none;font-weight:700;padding:6px 14px;">
+            Read Full Engineering Specifications &amp; Standards →
+          </a>
+        </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;margin-top:30px;">

@@ -1,6 +1,6 @@
 /**
  * Jollof Automations — Standalone Production & Development Server
- * Zero external npm dependencies. Native Node.js HTTP server.
+ * Supports static HTML, asset serving, mock API, and page route aliasing.
  */
 const http = require('http');
 const fs = require('fs');
@@ -81,12 +81,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Static file serving
-  if (pathname === '/' || pathname === '') {
+  // Route aliasing for static node server
+  if (pathname === '/' || pathname === '' || pathname === '/index.php') {
     pathname = '/index.html';
   }
 
-  const filePath = path.join(PUBLIC_DIR, pathname);
+  let filePath = path.join(PUBLIC_DIR, pathname);
+
+  // If requesting a .php page that doesn't have an html equivalent, check if it exists as file
+  if (!fs.existsSync(filePath) && pathname.endsWith('.php')) {
+    const htmlAlt = filePath.replace(/\.php$/, '.html');
+    if (fs.existsSync(htmlAlt)) {
+      filePath = htmlAlt;
+    }
+  }
 
   // Guard directory traversal
   if (!filePath.startsWith(PUBLIC_DIR)) {
@@ -96,12 +104,18 @@ const server = http.createServer((req, res) => {
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
+      // Fallback to index.html
+      const fallback = path.join(PUBLIC_DIR, 'index.html');
+      if (fs.existsSync(fallback)) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return fs.createReadStream(fallback).pipe(res);
+      }
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       return res.end('404 Not Found');
     }
 
     const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const contentType = MIME_TYPES[ext] || 'text/plain; charset=utf-8';
 
     res.writeHead(200, { 'Content-Type': contentType });
     fs.createReadStream(filePath).pipe(res);
@@ -110,7 +124,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n======================================================`);
-  console.log(`  JOLLOF AUTOMATIONS — STANDALONE SERVER READY`);
+  console.log(`  JOLLOF AUTOMATIONS — MULTI-PAGE SERVER READY`);
   console.log(`  Local URL:   http://localhost:${PORT}`);
   console.log(`  Directory:   ${PUBLIC_DIR}`);
   console.log(`======================================================\n`);

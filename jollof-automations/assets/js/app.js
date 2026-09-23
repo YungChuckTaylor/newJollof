@@ -136,11 +136,21 @@ const getScenes = () => (window.JA_SCENES && Object.keys(window.JA_SCENES).lengt
     }
 
     function applyEstimateToSurvey() {
-      const surveySec = document.getElementById('survey');
-      surveySec.scrollIntoView({ behavior: 'smooth' });
-      document.getElementById('clientPropType').value = currentPropName;
-      showToast('Configured budget applied to survey form ✨');
-    }
+  const surveySec = document.getElementById('survey');
+  if (surveySec) {
+    surveySec.scrollIntoView({ behavior: 'smooth' });
+    const propInput = document.getElementById('clientPropType');
+    if (propInput) propInput.value = currentPropName;
+    showToast('Configured budget applied to survey form ✨');
+  } else {
+    window.location.href = `book-survey.php?budget=${encodeURIComponent(document.getElementById('calc-total-amt').textContent)}&prop=${encodeURIComponent(currentPropName)}`;
+  }
+}
+
+function proceedFromHomeEstimator(e) {
+  if (e) e.preventDefault();
+  applyEstimateToSurvey();
+}
 
     /* -------------------------------------------------------------
        SURVEY LEAD SUBMISSION
