@@ -158,8 +158,26 @@ switch ($entity) {
             } else {
                 $id = DB::insert('campaigns', $fields);
             }
+            // Phase 6 (WP27.4, F75): Sync campaign promo code to promos table
+            if (DB::tableExists('promos')) {
+                $existsPromo = DB::value('SELECT id FROM promos WHERE code = ?', [$fields['code']]);
+                if (!$existsPromo) {
+                    DB::insert('promos', [
+                        'code'    => $fields['code'],
+                        'label'   => $fields['name'],
+                        'off'     => 0.1000,
+                        'flat'    => 0,
+                        'active'  => $fields['status'] === 'Live' ? 1 : 0,
+                    ]);
+                } else {
+                    DB::update('promos', [
+                        'label'  => $fields['name'],
+                        'active' => $fields['status'] === 'Live' ? 1 : 0,
+                    ], 'code = ?', [$fields['code']]);
+                }
+            }
             audit($actor, 'Saved campaign ' . $fields['code'], 'info');
-            json_ok(['id' => $id], 'Campaign saved');
+            json_ok(['id' => $id], 'Campaign saved and promo code synced');
         }
         break;
     }

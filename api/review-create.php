@@ -14,8 +14,9 @@ $scores = (array) input('scores', []);
 $booking = BookingService::find($ref);
 if (!$booking) json_fail('Reservation not found.', 404);
 if ((int) $booking['user_id'] !== $uid) json_fail('You can only review your own stays.', 403);
-if (!in_array((string) $booking['status'], ['completed', 'active'], true)) {
-    json_fail('You can leave a review once your stay is under way.');
+// Phase 6 (WP27.3, M05): Unified review eligibility (completed stays only)
+if ((string) $booking['status'] !== 'completed') {
+    json_fail('Reviews can only be submitted after check-out is completed (WP27).', 422);
 }
 if (mb_strlen($body) < 10) json_fail('Please write at least a sentence about your stay.');
 if (DB::value('SELECT 1 FROM reviews WHERE booking_ref = ?', [$ref])) {

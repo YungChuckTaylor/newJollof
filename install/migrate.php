@@ -79,6 +79,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $line;
         }
 
+        // Phase-6 back office completeness (WP27): cms_blocks, fraud_signals
+        foreach (ensure_phase6_back_office() as $line) {
+            $steps[] = $line;
+        }
+
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
@@ -979,6 +984,106 @@ function ensure_phase5_owner_workspace(): array
         }
     } catch (Throwable $e) {
         $lines[] = 'service_requests setup error: ' . $e->getMessage();
+    }
+
+    return $lines;
+}
+
+
+
+/**
+ * Phase-6 back office completeness schema (WP27).
+ *
+ *  • cms_blocks — dynamic site content blocks with draft and live versioning;
+ *  • fraud_signals — structured risk events and anomaly tracking.
+ *
+ * @return string[]
+ */
+function ensure_phase6_back_office(): array
+{
+    $lines = [];
+    $isSqlite = DB::isSqlite();
+
+    try {
+        if (!DB::tableExists('cms_blocks')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS cms_blocks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    block_key VARCHAR(64) NOT NULL UNIQUE,
+                    title VARCHAR(140) NOT NULL,
+                    content TEXT NOT NULL,
+                    draft TEXT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT "published",
+                    updated_by INTEGER NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS cms_blocks (
+                    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    block_key VARCHAR(64) NOT NULL,
+                    title VARCHAR(140) NOT NULL,
+                    content TEXT NOT NULL,
+                    draft TEXT DEFAULT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT "published",
+                    updated_by INT(10) UNSIGNED DEFAULT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_cms_block_key (block_key)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'cms_blocks created (WP27 CMS engine).';
+        }
+
+        // Seed default CMS blocks
+        $blocks = [
+            ['home_hero', 'Hero Banner Copy', 'Luxury residences with hotel hospitality across West Africa.'],
+            ['trust_promise', 'Trust & Escrow Guarantee', '100% escrow protection on every reservation until verified check-out.'],
+            ['faq_cancellation', 'Cancellation Policy FAQ', 'Flexible, moderate, and strict tiers clearly shown before payment.'],
+        ];
+        $seeded = 0;
+        foreach ($blocks as [$k, $t, $c]) {
+            if (!DB::value('SELECT 1 FROM cms_blocks WHERE block_key = ?', [$k])) {
+                DB::insert('cms_blocks', ['block_key' => $k, 'title' => $t, 'content' => $c]);
+                $seeded++;
+            }
+        }
+        if ($seeded > 0) {
+            $lines[] = "Seeded {$seeded} default content blocks into cms_blocks.";
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'cms_blocks setup error: ' . $e->getMessage();
+    }
+
+    try {
+        if (!DB::tableExists('fraud_signals')) {
+            if ($isSqlite) {
+                DB::run('CREATE TABLE IF NOT EXISTS fraud_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    rule_key VARCHAR(64) NOT NULL,
+                    subject_type VARCHAR(32) NOT NULL,
+                    subject_id VARCHAR(64) NOT NULL,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    evidence TEXT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )');
+            } else {
+                DB::run('CREATE TABLE IF NOT EXISTS fraud_signals (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    rule_key VARCHAR(64) NOT NULL,
+                    subject_type VARCHAR(32) NOT NULL,
+                    subject_id VARCHAR(64) NOT NULL,
+                    score INT(11) NOT NULL DEFAULT 0,
+                    evidence TEXT DEFAULT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY ix_signal_rule (rule_key),
+                    KEY ix_signal_subject (subject_type, subject_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            }
+            $lines[] = 'fraud_signals created (WP27 fraud detection engine).';
+        } else {
+            $lines[] = 'fraud_signals already present.';
+        }
+    } catch (Throwable $e) {
+        $lines[] = 'fraud_signals setup error: ' . $e->getMessage();
     }
 
     return $lines;
