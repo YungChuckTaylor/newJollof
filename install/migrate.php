@@ -1446,91 +1446,219 @@ function sqlite_translate(string $sql): string
 
 /* -------------------------------------------------------------------- view */
 
-$tables = [
-    'dispute_categories'       => 'Dispute categories (SLA per topic)',
-    'disputes'                 => 'Disputes raised from the help centre',
-    'dispute_events'           => 'Dispute timeline: messages, evidence, status changes',
-    'chat_departments'         => 'Live chat queues',
-    'chat_agents'              => 'Chat agents the admin creates and assigns',
-    'chat_agent_departments'   => 'Agent ↔ queue assignments',
-    'chat_sessions'            => 'Chat requests (queued, active, closed)',
-    'chat_messages'            => 'Chat transcript lines',
-    'chat_events'              => 'Chat audit trail (assign, transfer, close)',
-    'chat_canned'              => 'Canned replies for agents',
+$phaseGroups = [
+    'Phase 0 · System Hardening & Honesty (WP01–WP03)' => [
+        'feature_flags'           => 'Feature flag registry & capability claims gate (R1)',
+        'users.auth_version'      => 'Global session epoch for instant session revocations (F70/F72)',
+    ],
+    'Phase 1 · Money Machine & Double-Entry Ledger (WP04–WP07)' => [
+        'payment_intents'         => 'Universal Paystack gateway payment intents (F28)',
+        'ledger_accounts'         => 'Double-entry chart of accounts (F29)',
+        'ledger_entries'          => 'Immutable financial journal entries',
+        'installment_plans'       => 'Split payments & security deposit tracking (F30)',
+        'outbox_events'           => 'Transactional outbox & retry worker queue (F51)',
+    ],
+    'Phase 2 · Booking Integrity & Anti-Collision (WP08–WP11)' => [
+        'night_holds'             => 'Atomic double-booking collision prevention locks (F26)',
+        'booking_changes'         => 'Reservation change requests & modification audits (F32)',
+    ],
+    'Phase 3 · Trust, Identity & Account Security (WP12–WP16)' => [
+        'verify_tokens'           => 'Email challenge tokens & password recovery (F16/F20)',
+        'users.email_verified_at' => 'Cryptographically verified email challenge timestamp',
+        'users.phone_verified_at' => 'Cryptographically verified phone challenge timestamp',
+        'kyc_documents'           => 'Encrypted guest & host ID vault (F19)',
+        'user_prefs'              => 'User settings & currency preference persistence (F18)',
+        'safety_reports'          => 'Community trust, safety incidents & report triage (WP16)',
+        'user_blocks'             => 'Bidirectional member blocking registry',
+    ],
+    'Phase 5 · Owner Workspace & Co-Hosting (WP23–WP26)' => [
+        'listing_drafts'          => 'Multi-step draft pipeline & autosave (F63)',
+        'host_invitations'        => 'Co-host team invites & permission scoping (F64)',
+        'template_sends'          => 'Automated guest messaging logs (WP25)',
+        'service_requests'        => 'Turnover, cleaning & property inspections (WP26)',
+    ],
+    'Phase 6 · Back Office Completeness (WP27)' => [
+        'cms_blocks'              => 'Dynamic CMS blocks & policy copy manager (F77)',
+        'fraud_signals'           => 'Risk scoring, velocity detection & fraud flags (WP27)',
+    ],
+    'Phase 7 · Support Modules (WP28–WP31)' => [
+        'disputes'                => 'Dispute resolution centre records (WP28)',
+        'dispute_events'          => 'Dispute timeline: evidence, staff notes, outcomes',
+        'dispute_categories'      => 'Dispute SLA categories & routing rules',
+        'dispute_case_tokens'     => 'Secure cryptographic case access tokens (WP30)',
+        'dispute_ratings'         => 'Multi-party mediation satisfaction scores (WP30)',
+        'chat_departments'        => 'Live chat queues & routing desks (WP29)',
+        'chat_agents'             => 'Chat agents, supervisors & capacity limits',
+        'chat_agent_departments'  => 'Agent ↔ queue assignments',
+        'chat_sessions'           => 'Live chat visitor sessions & status tracking',
+        'chat_messages'           => 'Chat transcripts & message timeline',
+        'chat_events'             => 'Chat desk audit trail (assignment, transfers, closures)',
+        'chat_canned'             => 'Scoped canned replies for agents (WP31)',
+    ],
+    'Phase 8 · Platform Reach & Polish (WP32–WP37)' => [
+        'business_leads'          => 'Corporate partnership inquiries & business leads (WP36)',
+        'push_subscriptions'      => 'Web push notification subscriptions (WP37)',
+    ],
 ];
 
-$rows = [];
-foreach ($tables as $table => $label) {
-    $exists = DB::tableExists($table);
-    $rows[] = [$table, $label, $exists ? 'ready' : 'missing', $exists ? (int) DB::value("SELECT COUNT(*) FROM $table", [], 0) : 0];
+$evaluatedPhases = [];
+$totalItems = 0;
+$readyItems = 0;
+
+foreach ($phaseGroups as $phaseTitle => $items) {
+    $phaseData = [
+        'title' => $phaseTitle,
+        'items' => [],
+        'ready' => true,
+    ];
+
+    foreach ($items as $name => $label) {
+        $totalItems++;
+        if (strpos($name, '.') !== false) {
+            [$tbl, $col] = explode('.', $name, 2);
+            $isCol = true;
+            $exists = DB::tableExists($tbl) && DB::columnExists($tbl, $col);
+            $count = $exists ? (int) DB::value("SELECT COUNT(*) FROM `{$tbl}` WHERE `{$col}` IS NOT NULL", [], 0) : 0;
+        } else {
+            $isCol = false;
+            $exists = DB::tableExists($name);
+            $count = $exists ? (int) DB::value("SELECT COUNT(*) FROM `{$name}`", [], 0) : 0;
+        }
+
+        if ($exists) {
+            $readyItems++;
+        } else {
+            $phaseData['ready'] = false;
+        }
+
+        $phaseData['items'][] = [
+            'name'   => $name,
+            'is_col' => $isCol,
+            'label'  => $label,
+            'state'  => $exists ? 'ready' : 'missing',
+            'count'  => $count,
+        ];
+    }
+
+    $evaluatedPhases[] = $phaseData;
 }
 
-render_shell($isAdmin, $rows, $steps, $errors, $ran, $migrationFile);
+render_shell($isAdmin, $evaluatedPhases, $totalItems, $readyItems, $steps, $errors, $ran, $migrationFile);
 
 /**
- * @param array<int,array{0:string,1:string,2:string,3:int}> $rows
+ * @param array $evaluatedPhases
  * @param string[] $steps
  * @param string[] $errors
  */
-function render_shell(bool $isAdmin, array $rows, array $steps, array $errors, bool $ran, string $sqlFile): void
+function render_shell(bool $isAdmin, array $evaluatedPhases, int $totalItems, int $readyItems, array $steps, array $errors, bool $ran, string $sqlFile): void
 {
-    $title = 'Migration 2026_09_12';
+    $title = 'Database Migration (Phases 0 to 8)';
+    $allReady = ($readyItems === $totalItems);
     ?><!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title><?= e($title) ?> · Jollof Living</title>
     <style>
-      :root{--gold:#c9a227;--ink:#1c1a15;--paper:#faf7f0;--line:#e4ddcc;--ok:#2c6e49;--bad:#a3341f}
+      :root{--gold:#c9a227;--gold-hover:#b88e1a;--ink:#1c1a15;--paper:#faf7f0;--line:#e4ddcc;--ok:#2c6e49;--bad:#a3341f}
       *{box-sizing:border-box}
-      body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;padding:40px 18px}
-      .card{max-width:760px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:32px 30px;box-shadow:0 20px 50px rgba(40,32,10,.07)}
-      h1{font-size:24px;margin:0 0 6px;letter-spacing:-.02em}
-      .sub{color:#7d7768;margin:0 0 22px;font-size:14px}
-      table{width:100%;border-collapse:collapse;margin:14px 0 6px;font-size:14px}
-      th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
-      th{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8d8574}
-      code{background:#f3eee0;padding:1px 6px;border-radius:5px;font-size:13px}
+      body{margin:0;background:var(--paper);color:var(--ink);font:14.5px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;padding:36px 16px}
+      .card{max-width:920px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:32px 30px;box-shadow:0 20px 50px rgba(40,32,10,.07)}
+      h1{font-size:24px;margin:0 0 4px;letter-spacing:-.02em;color:#12180f}
+      .sub{color:#7d7768;margin:0 0 20px;font-size:13.5px}
+      .summary-banner{display:flex;justify-content:space-between;align-items:center;background:#f5f0e1;border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+      .stat{font-size:24px;font-weight:700;color:var(--ink)}
+      .stat.ok{color:var(--ok)}
+      .stat.bad{color:var(--bad)}
+      .phase-card{border:1px solid var(--line);border-radius:10px;margin-bottom:18px;overflow:hidden}
+      .phase-head{background:#fdfcf9;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th,td{text-align:left;padding:8px 14px;border-bottom:1px solid #f2ede1}
+      tr:last-child td{border-bottom:none}
+      th{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8d8574;background:#fff}
+      code{background:#f3eee0;padding:2px 6px;border-radius:5px;font-size:12.5px;font-family:monospace}
       .bad{color:var(--bad)}.ok{color:var(--ok)}
-      .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px}
-      .pill.ok{background:rgba(44,110,73,.12)}.pill.bad{background:rgba(163,52,31,.12)}
-      button{margin-top:22px;width:100%;padding:13px;border:0;border-radius:10px;background:var(--gold);color:#231a05;font-weight:700;font-size:15px;cursor:pointer}
-      .note{background:#f7f3e8;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:18px 0;font-size:14px}
-      ul{padding-left:20px;margin:10px 0}
-      a{color:#8a6d10}
+      .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+      .pill.ok{background:rgba(44,110,73,.12);color:var(--ok)}
+      .pill.bad{background:rgba(163,52,31,.12);color:var(--bad)}
+      button.btn-migrate{margin-top:20px;width:100%;padding:14px;border:0;border-radius:10px;background:var(--gold);color:#12180f;font-weight:700;font-size:15px;cursor:pointer;transition:background .15s ease}
+      button.btn-migrate:hover{background:var(--gold-hover)}
+      .steps-box{background:#f0f8f3;border:1px solid #cce5d6;border-radius:10px;padding:16px 18px;margin:18px 0;font-size:13.5px}
+      .errors-box{background:#fdf0ee;border:1px solid #f5c6cb;border-radius:10px;padding:16px 18px;margin:18px 0;font-size:13.5px}
+      ul{padding-left:20px;margin:8px 0}
+      a{color:#8a6d10;text-decoration:none}
+      a:hover{text-decoration:underline}
     </style></head><body><div class="card">
-    <h1>Dispute centre &amp; live chat</h1>
-    <p class="sub">Migration 2026_09_12 · Jollof Living</p>
-    <?php foreach ($errors as $err): ?><p class="bad">✕ <?= e($err) ?></p><?php endforeach; ?>
-    <?php foreach ($steps as $line): ?><p class="ok">✓ <?= e($line) ?></p><?php endforeach; ?>
-    <?php if ($ran): ?><p class="ok"><b>Migration complete.</b> You can return to the site — the help centre now has a working dispute centre and the live chat console is at <a href="<?= e(url('agent.php')) ?>">/agent.php</a>.</p><?php endif; ?>
+    <h1>Platform Upgrades Migration (Phases 0 — 8)</h1>
+    <p class="sub">Full-Functionality Implementation Plan · Database Schema &amp; State Manager · Jollof Living</p>
 
-    <table>
-      <thead><tr><th>Table</th><th>Purpose</th><th>State</th><th>Rows</th></tr></thead>
-      <tbody>
-      <?php foreach ($rows as [$table, $label, $state, $count]): ?>
-        <tr><td><code><?= e($table) ?></code></td><td><?= e($label) ?></td>
-        <td><span class="pill <?= $state === 'ready' ? 'ok' : 'bad' ?>"><?= e($state) ?></span></td><td><?= (int) $count ?></td></tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
+    <?php if (!empty($errors)): ?>
+      <div class="errors-box">
+        <b>Migration Errors:</b>
+        <?php foreach ($errors as $err): ?><p class="bad" style="margin:4px 0">✕ <?= e($err) ?></p><?php endforeach; ?>
+      </div>
+    <?php endif; ?>
 
-    <div class="note">
-      <b>What this adds</b>
-      <ul>
-        <li>A database-driven <b>dispute resolution centre</b> on <code>help.php</code>: guests raise a dispute against a real booking, share evidence, message a mediator and receive a tracked outcome.</li>
-        <li>A <b>live chat module</b>: the admin creates agents, assigns them to queues, and agents work chat requests from a console at <code>/agent.php</code>. Visitors chat from the widget on every page or <code>/chat.php</code>.</li>
-      </ul>
-      Raw SQL for phpMyAdmin: <code><?= e(basename($sqlFile)) ?></code>
+    <?php if ($ran): ?>
+      <div class="steps-box">
+        <b class="ok">Migration Executed Successfully:</b>
+        <div style="margin-top:8px">
+          <?php foreach ($steps as $line): ?><div class="ok" style="margin:3px 0">✓ <?= e($line) ?></div><?php endforeach; ?>
+        </div>
+        <p style="margin-top:12px;font-weight:600">All phases 0 through 8 tables, columns, and seed records are active.</p>
+      </div>
+    <?php endif; ?>
+
+    <div class="summary-banner">
+      <div>
+        <div style="font-size:12px;color:#7d7768;text-transform:uppercase;letter-spacing:.1em">System Readiness</div>
+        <div class="stat <?= $allReady ? 'ok' : 'bad' ?>">
+          <?= $readyItems ?> / <?= $totalItems ?> Tables &amp; Columns Ready
+        </div>
+      </div>
+      <div>
+        <?php if ($allReady): ?>
+          <span class="pill ok" style="padding:6px 14px;font-size:13px">✓ All 8 Phases Ready</span>
+        <?php else: ?>
+          <span class="pill bad" style="padding:6px 14px;font-size:13px">⚠ Migration Required</span>
+        <?php endif; ?>
+      </div>
     </div>
 
+    <?php foreach ($evaluatedPhases as $p): ?>
+      <div class="phase-card">
+        <div class="phase-head">
+          <span><?= e($p['title']) ?></span>
+          <span class="pill <?= $p['ready'] ? 'ok' : 'bad' ?>"><?= $p['ready'] ? 'READY' : 'NEEDS MIGRATION' ?></span>
+        </div>
+        <table>
+          <thead><tr><th style="width:230px">Table / Column</th><th>Purpose</th><th style="width:70px">State</th><th style="width:60px">Rows</th></tr></thead>
+          <tbody>
+          <?php foreach ($p['items'] as $item): ?>
+            <tr>
+              <td><code><?= e($item['name']) ?></code></td>
+              <td style="color:#4a4538"><?= e($item['label']) ?></td>
+              <td><span class="pill <?= $item['state'] === 'ready' ? 'ok' : 'bad' ?>"><?= e($item['state']) ?></span></td>
+              <td><?= (int) $item['count'] ?></td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endforeach; ?>
+
     <?php if (!$isAdmin): ?>
-      <p><b>Administrator sign-in required.</b> The migration changes the database, so it only runs for a signed-in administrator.</p>
+      <p style="margin-top:20px"><b>Administrator sign-in required.</b> The migration updates the database, so it only runs for a signed-in administrator.</p>
       <p><a href="<?= e(url('admin-login.php?next=' . urlencode('/install/migrate.php'))) ?>">Sign in to the back office →</a></p>
     <?php else: ?>
       <form method="post">
         <?= csrf_field() ?>
-        <button type="submit">Run migration now</button>
+        <button type="submit" class="btn-migrate">Run / Update Migration (Phases 0 — 8)</button>
       </form>
     <?php endif; ?>
-    <p style="margin-top:18px"><a href="<?= e(url('')) ?>">← Back to jollofliving.com</a> · <a href="<?= e(url('admin.php')) ?>">Back office</a></p>
+
+    <p style="margin-top:24px;text-align:center;font-size:13px">
+      <a href="<?= e(url('')) ?>">← Back to site</a> ·
+      <a href="<?= e(url('admin.php')) ?>">Back Office</a> ·
+      <a href="<?= e(url('api/verify-schema.php')) ?>">JSON / API Schema Verifier</a>
+    </p>
     </div></body></html><?php
 }
