@@ -435,11 +435,32 @@ final class BookingService
     /** No overlapping live reservation for these dates. */
     public static function isAvailable(int $propertyId, string $checkin, string $checkout, ?int $ignoreId = null): bool
     {
+        $cutoff = date('Y-m-d H:i:s', strtotime('-30 minutes'));
+
+        // Check active night holds (locks in active status created in last 30 min)
+        if (DB::tableExists('night_holds')) {
+            $holdConflict = (int) DB::value(
+                "SELECT COUNT(*) FROM night_holds h
+                  JOIN bookings b ON b.id = h.booking_id
+                 WHERE h.property_id = ?
+                   AND h.status = 'active'
+                   AND h.stay_date >= ? AND h.stay_date < ?
+                   AND (b.status IN ('confirmed','active','pending') OR (b.status = 'payment_required' AND h.created_at >= ?))"
+                . ($ignoreId ? " AND h.booking_id <> {$ignoreId}" : ''),
+                [$propertyId, $checkin, $checkout, $cutoff],
+                0
+            );
+            if ($holdConflict > 0) {
+                return false;
+            }
+        }
+
         $sql = "SELECT COUNT(*) FROM bookings
                  WHERE property_id = ?
-                   AND status IN ('pending','confirmed','active')
+                   AND (status IN ('pending','confirmed','active')
+                        OR (status = 'payment_required' AND created_at >= ?))
                    AND checkin < ? AND checkout > ?";
-        $args = [$propertyId, $checkout, $checkin];
+        $args = [$propertyId, $cutoff, $checkout, $checkin];
         if ($ignoreId) {
             $sql .= ' AND id <> ?';
             $args[] = $ignoreId;
@@ -450,21 +471,34 @@ final class BookingService
     /** Dates already reserved, for the calendar widget. */
     public static function blockedRanges(int $propertyId): array
     {
+        $cutoff = date('Y-m-d H:i:s', strtotime('-30 minutes'));
         return array_map(static fn($b) => [$b['checkin'], $b['checkout']], DB::all(
             "SELECT checkin, checkout FROM bookings
-              WHERE property_id = ? AND status IN ('pending','confirmed','active') AND checkout >= ?",
-            [$propertyId, date('Y-m-d')]
+              WHERE property_id = ?
+                AND (status IN ('pending','confirmed','active') OR (status = 'payment_required' AND created_at >= ?))
+                AND checkout >= ?",
+            [$propertyId, $cutoff, date('Y-m-d')]
         ));
     }
 
-    public static function find(string $ref): ?array
+    /** Find a booking by its public reference (e.g. JL-2026-1234) or numeric ID */
+    public static function find($refOrId): ?array
     {
-        $b = DB::row(
-            'SELECT b.*, p.slug AS property_slug, p.name AS property_name, p.img, p.area, p.city, p.price AS nightly
-               FROM bookings b JOIN properties p ON p.id = b.property_id
-              WHERE b.ref = ?',
-            [$ref]
-        );
+        if (is_numeric($refOrId)) {
+            $b = DB::row(
+                'SELECT b.*, p.slug AS property_slug, p.name AS property_name, p.img, p.area, p.city, p.price AS nightly
+                   FROM bookings b JOIN properties p ON p.id = b.property_id
+                  WHERE b.id = ?',
+                [(int) $refOrId]
+            );
+        } else {
+            $b = DB::row(
+                'SELECT b.*, p.slug AS property_slug, p.name AS property_name, p.img, p.area, p.city, p.price AS nightly
+                   FROM bookings b JOIN properties p ON p.id = b.property_id
+                  WHERE b.ref = ?',
+                [(string) $refOrId]
+            );
+        }
         if ($b) {
             $b['addons'] = json_decode((string) $b['addons'], true) ?: [];
         }
@@ -531,7 +565,7 @@ final class BookingService
         $map = [
             'checkin'  => ['from' => ['confirmed'], 'to' => 'active',    'escrow' => 'held',     'msg' => 'Checked in — enjoy the stay. The escrow stays held until check-out.'],
             'checkout' => ['from' => ['active'],    'to' => 'completed', 'escrow' => 'released', 'msg' => 'Check-out confirmed — the escrow has been released to the host.'],
-            'cancel'   => ['from' => ['pending', 'confirmed'], 'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Cancellation confirmed — refund on its way.'],
+            'cancel'   => ['from' => ['payment_required', 'pending', 'confirmed'], 'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Cancellation confirmed — refund on its way.'],
             'approve'  => ['from' => ['pending'],   'to' => 'confirmed', 'escrow' => 'held',     'msg' => 'Request approved.'],
             'decline'  => ['from' => ['pending'],   'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Request declined and refunded.'],
         ];

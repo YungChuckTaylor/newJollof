@@ -1537,6 +1537,14 @@ function bkReview(){
           ${BOOK_STATE.req?'<div class="krow"><span class="k">Host confirmation</span><span class="v">Within 24 hours</span></div>':""}
           <div class="krow"><span class="k">Check-in</span><span class="v">From 3:00 PM · entry code issued with your confirmation</span></div>
         </div>
+        <div class="panel">
+          <h3 style="font-size:17px">Guest contact details</h3>
+          <div class="frm-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <div class="frm-row"><label>Full name</label><input class="inp" id="bkName" value="${esc((USER&&USER.name)||"")}" placeholder="e.g. Adaeze Obi"></div>
+            <div class="frm-row"><label>Email address</label><input class="inp" id="bkEmail" type="email" value="${esc((USER&&USER.email)||"")}" placeholder="e.g. adaeze@example.com"></div>
+          </div>
+          <div class="frm-row" style="margin-top:8px"><label>Phone number</label><input class="inp" id="bkPhone" type="tel" value="${esc((USER&&USER.phone)||"")}" placeholder="e.g. +234 801 234 5678"></div>
+        </div>
         <label class="chk" style="margin-top:4px"><input type="checkbox" id="bkTerms"> I agree to the house rules, cancellation policy, and extended-stay terms (if 30+ nights)</label>
         <label class="chk" style="margin-top:8px"><input type="checkbox" checked> Send me booking updates via email, SMS &amp; WhatsApp</label>
         <label class="chk" style="margin-top:8px"><input type="checkbox" checked> Add to my calendar &amp; wallet pass</label>
@@ -1599,6 +1607,12 @@ function refreshCal(){}
 async function confirmBooking(p){
   const btn=$("#bkConfirm");
   if(btn){ btn.disabled=true; btn.dataset.label=btn.textContent; btn.textContent="Connecting to payment…"; }
+  const name=($("#bkName")?.value||(USER&&USER.name)||"").trim();
+  const email=($("#bkEmail")?.value||(USER&&USER.email)||"").trim();
+  const phone=($("#bkPhone")?.value||(USER&&USER.phone)||"").trim();
+  if(!name){ toast("Please provide your name","x"); if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||"Pay Now";} return; }
+  if(!email || !email.includes("@")){ toast("Please provide a valid email address","x"); if(btn){btn.disabled=false;btn.textContent=btn.dataset.label||"Pay Now";} return; }
+
   const payload={
     property:p.id,
     checkin:BOOK_STATE.in, checkout:BOOK_STATE.out,
@@ -1606,7 +1620,7 @@ async function confirmBooking(p){
     method:"paystack", addons:BOOK_STATE.addons,
     promo:BOOK_STATE.promo||"", giftCode:BOOK_STATE.giftCode||"",
     split:!!BOOK_STATE.split, request:!!BOOK_STATE.req,
-    name:$("#bkName")?.value||"", email:$("#bkEmail")?.value||"", phone:$("#bkPhone")?.value||"",
+    name, email, phone,
   };
   const r=await api("booking-create.php",payload);
   if(!r.ok){
