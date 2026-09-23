@@ -17,6 +17,18 @@ if (mb_strlen($text) > 4000) json_fail('That message is too long.');
 $conv = DB::row('SELECT * FROM conversations WHERE id = ? AND user_id = ?', [$convId, $uid]);
 if (!$conv) json_fail('Conversation not found.', 404);
 
+// Phase 3 (WP16): Check for 2-way block
+$targetHostId = (int) ($conv['counterparty_id'] ?? 0);
+if ($targetHostId > 0 && DB::tableExists('user_blocks')) {
+    $isBlocked = DB::value(
+        'SELECT 1 FROM user_blocks WHERE (user_id = ? AND blocked_user_id = ?) OR (user_id = ? AND blocked_user_id = ?) LIMIT 1',
+        [$uid, $targetHostId, $targetHostId, $uid]
+    );
+    if ($isBlocked) {
+        json_fail('Unable to send message to this recipient (WP16).', 403);
+    }
+}
+
 $now = date('Y-m-d H:i:s');
 // everything the guest already received counts as read the moment they reply
 DB::run("UPDATE messages SET read_flag = 1 WHERE conversation_id = ? AND sender <> 'me'", [$convId]);

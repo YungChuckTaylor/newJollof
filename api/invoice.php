@@ -20,7 +20,12 @@ if (!$b) {
     $isPost ? json_fail('Reservation not found.', 404) : exit('Reservation not found.');
 }
 if ((int) $b['user_id'] !== (int) $user['id'] && !Auth::isAdmin()) {
-    $isPost ? json_fail('That reservation is not yours.', 403) : exit('Not authorised.');
+    if ($isPost) {
+        json_fail('That reservation is not yours.', 403);
+    } else {
+        http_response_code(403);
+        exit('Not authorised.');
+    }
 }
 
 $rates = Repo::rates();

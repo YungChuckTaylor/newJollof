@@ -80,6 +80,43 @@ final class View
             'takeRate'      => (float) Repo::setting('host_take_rate', 0.12),
         ];
 
+        /* The dispute centre and the live chat desk are optional: they appear
+           once the migration has run, and their data is fetched per page so the
+           payload stays small.
+
+           The whole block is defensive on purpose. A support table that is
+           missing, a half-finished migration or a partially uploaded include
+           must never take a page down — least of all the back office — so
+           anything that goes wrong here is logged and the page simply renders
+           without the support blocks. install/diagnose.php reports the cause. */
+        if (in_array($page, ['help', 'agent', 'admin'], true)) {
+            $support = [];
+            try {
+                if (DB::tableExists('disputes')) {
+                    require_once JL_INC . '/disputes.php';
+                    $support['disputeCategories'] = DisputeService::categories();
+                    $support['disputeWants']      = DisputeService::WANTS;
+                    $support['disputeOutcomes']   = DisputeService::OUTCOMES;
+                    $support['disputeStats']      = DisputeService::stats();
+                    $support['disputes']          = $uid ? DisputeService::forUser($uid, 12) : [];
+                }
+                if (DB::tableExists('chat_sessions')) {
+                    require_once JL_INC . '/livechat.php';
+                    $support['chat'] = [
+                        'settings'    => LiveChat::settings(),
+                        'departments' => LiveChat::departments(true),
+                    ];
+                    $support['chatAgent'] = $uid ? LiveChat::agentForUser($uid) : null;
+                }
+            } catch (Throwable $e) {
+                // Not fatal by design: log it, ship what we have, keep the page.
+                $support = [];
+                error_log('Jollof support payload (' . $page . '): ' . get_class($e) . ': ' . $e->getMessage()
+                    . ' in ' . $e->getFile() . ':' . $e->getLine());
+            }
+            $data = array_merge($data, $support);
+        }
+
         if (Auth::isAdmin()) {
             $data['admin'] = Repo::adminState();
             $data['adminStats'] = Repo::adminStats();
@@ -101,6 +138,9 @@ final class View
             'currency'=> active_currency(),
             'isAdmin' => Auth::isAdmin(),
             'admin2fa'=> (bool) config('security.admin_2fa_required'),
+            /* Capability ledger (R1 claims gate): the client may only render
+               promises about outside services whose flag is switched on. */
+            'flags'   => Repo::flagsForClient(),
             'user'    => $user ? [
                 'id'            => (int) $user['id'],
                 'name'          => $user['name'],
@@ -111,10 +151,13 @@ final class View
                 'role'          => $user['role'],
                 'isHost'        => Auth::isHost(),
                 'accountType'   => Auth::isHost() ? 'owner' : 'customer',
-                'kyc'           => (int) $user['kyc_verified'] === 1,
-                'emailVerified' => ($user['status'] ?? '') === 'Verified',
-                'referral'      => $user['referral_code'],
-                'memberSince'   => date('M Y', strtotime((string) $user['created_at'])),
+                'kyc'           => (int) ($user['kyc_verified'] ?? 0) === 1,
+                'emailVerified' => !empty($user['email_verified_at']) || ($user['status'] ?? '') === 'Verified',
+                'phoneVerified' => !empty($user['phone_verified_at']),
+                'referral'        => $user['referral_code'],
+                'referralCount'   => (int) (DB::tableExists('users') ? DB::value('SELECT COUNT(*) FROM users WHERE referral_code = ?', [$user['referral_code']]) : 0),
+                'referralCredits' => (int) (DB::tableExists('points_ledger') ? DB::value('SELECT COALESCE(SUM(amount), 0) FROM points_ledger WHERE user_id = ? AND kind = ?', [(int) $user['id'], 'referral']) : 0),
+                'memberSince'     => date('M Y', strtotime((string) $user['created_at'])),
                 'lastLogin'     => $user['last_login_at'] ? date('M j, Y H:i', strtotime((string) $user['last_login_at'])) : null,
             ] : null,
             'state'   => self::state(),
@@ -465,6 +508,7 @@ final class View
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 21l1.6-5A8.5 8.5 0 1 1 21 12z"/></svg>
 </button>
 
+<script src="<?= e(asset('assets/js/chat.js')) ?>" defer></script>
 <script src="<?= e(asset('assets/js/site.js')) ?>" defer></script>
 </body>
 </html>

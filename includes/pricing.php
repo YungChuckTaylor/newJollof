@@ -25,12 +25,28 @@ final class Pricing
      * @param string $promo   promo code
      * @param int    $gift    gift-card credit in NGN
      */
-    public static function quote(array $p, int $nights, array $addons = [], string $promo = '', int $gift = 0): array
+    public static function quote(array $p, int $nights, array $addons = [], string $promo = '', int $gift = 0, ?string $checkin = null, ?string $checkout = null): array
     {
         $R = Repo::rates();
         $nights = max(1, $nights);
+        $pid = (int) ($p['pid'] ?? $p['id'] ?? 0);
         $nightly = (int) $p['price'];
-        $base = $nightly * $nights;
+
+        // Phase 2 (WP08): Calculate exact base amount accounting for daily calendar overrides
+        $base = 0;
+        if ($checkin !== null && $checkout !== null && $pid > 0 && DB::tableExists('property_calendar')) {
+            $cur = strtotime($checkin);
+            $out = strtotime($checkout);
+            $overrides = DB::pairs('SELECT day, price FROM property_calendar WHERE property_id = ? AND day >= ? AND day < ?', [$pid, $checkin, $checkout]);
+            while ($cur < $out) {
+                $dayIso = date('Y-m-d', $cur);
+                $dayPrice = isset($overrides[$dayIso]) && $overrides[$dayIso] !== null ? (int) $overrides[$dayIso] : $nightly;
+                $base += $dayPrice;
+                $cur = strtotime('+1 day', $cur);
+            }
+        } else {
+            $base = $nightly * $nights;
+        }
 
         $discRate = $nights >= 30 ? (float) $R['monthlyDisc'] : ($nights >= 7 ? (float) $R['weeklyDisc'] : 0.0);
         $lengthDiscount = (int) round($base * $discRate);
@@ -119,6 +135,12 @@ final class BookingService
             return [false, 'That residence is no longer available.', null];
         }
 
+        // Phase 2 (WP09): Reject bookings on paused/draft/pending listings
+        $pStatus = strtolower((string) ($p['status'] ?? 'active'));
+        if (in_array($pStatus, ['paused', 'pending', 'draft', 'disabled'], true)) {
+            return [false, 'This residence is currently not accepting reservations (WP09).', null];
+        }
+
         $checkin = self::date($in['checkin'] ?? '');
         $checkout = self::date($in['checkout'] ?? '');
         if (!$checkin || !$checkout) {
@@ -132,7 +154,12 @@ final class BookingService
         }
 
         $nights = nights_between($checkin, $checkout);
-        $guests = max(1, min((int) ($in['guests'] ?? 1), (int) $p['guests']));
+        $requestedGuests = (int) ($in['guests'] ?? 1);
+        $maxGuests = (int) ($p['guests'] ?? 2);
+        if ($requestedGuests > $maxGuests) {
+            return [false, "This residence accommodates up to {$maxGuests} guests (WP09).", null];
+        }
+        $guests = max(1, $requestedGuests);
 
         if (!self::isAvailable((int) $p['pid'], $checkin, $checkout)) {
             return [false, 'Those dates have just been taken. Please choose another window.', null];
@@ -140,8 +167,33 @@ final class BookingService
 
         $addons = array_values(array_filter((array) ($in['addons'] ?? []), 'is_string'));
         $promo  = strtoupper(trim((string) ($in['promo'] ?? '')));
-        $gift   = (int) ($in['gift'] ?? 0);
-        $q = Pricing::quote($p, $nights, $addons, $promo, $gift);
+
+        /* Gift-card credit is never a number the browser may type — the client
+           sends the CODE, and only the database says what the card is worth.
+           The applied amount is min(balance, what this stay actually costs). */
+        $giftCode = strtoupper(trim((string) ($in['giftCode'] ?? '')));
+        $gift     = 0;
+        $giftCard = null;
+        if ($giftCode !== '') {
+            if (!DB::tableExists('gift_cards')) {
+                return [false, 'Gift cards are not provisioned on this install yet.', null];
+            }
+            $giftCard = DB::row("SELECT * FROM gift_cards WHERE code = ? AND status = 'active'", [$giftCode]);
+            if (!$giftCard) {
+                return [false, 'That gift card code is not valid or is no longer active.', null];
+            }
+            if ((int) $giftCard['balance'] <= 0) {
+                return [false, 'That gift card has no balance left.', null];
+            }
+        }
+        $q = Pricing::quote($p, $nights, $addons, $promo, 0, $checkin, $checkout);
+        if ($giftCard) {
+            $payable = max(0, (int) $q['total']);
+            if ($payable > 0) {
+                $gift = max(1, min((int) $giftCard['balance'], $payable));
+                $q = Pricing::quote($p, $nights, $addons, $promo, $gift, $checkin, $checkout);
+            }
+        }
 
         // Fall back to the signed-in member's own details. Note the checks are
         // for an EMPTY value, not just a missing key: the booking form omits
@@ -156,6 +208,12 @@ final class BookingService
         if ($phone === '') { $phone = trim((string) ($user['phone'] ?? '')); }
         if ($name === '' || !is_email($email)) {
             return [false, 'Please provide your name and a valid email address.', null];
+        }
+
+        // Phase 1 (WP06): Split payment eligibility check (minimum 30 nights)
+        $splitRequested = !empty($in['split']);
+        if ($splitRequested && $nights < 30) {
+            return [false, 'Split payment (50% now, 50% at check-in) is only eligible on extended stays of 30 nights or more (WP06).', null];
         }
 
         $isRequest = !empty($in['request']) || !$p['instant'];
@@ -205,8 +263,24 @@ final class BookingService
                 'checkin_code'  => str_pad((string) random_int(1000, 9999), 4, '0', STR_PAD_LEFT) . '#',
                 'notes'         => (string) ($in['notes'] ?? '') ?: null,
                 // a frozen copy of the quote, so an invoice always shows what was charged
-                'breakdown'     => json_encode($q),
+                'breakdown'     => json_encode($giftCode !== '' && $gift > 0 ? $q + ['giftCode' => $giftCode] : $q),
             ]);
+
+            // Phase 2 (WP09): Hard atomic night holds against concurrency double-booking
+            if (DB::tableExists('night_holds')) {
+                $holdCur = strtotime($checkin);
+                $holdOut = strtotime($checkout);
+                while ($holdCur < $holdOut) {
+                    DB::insert('night_holds', [
+                        'property_id' => (int) $p['pid'],
+                        'stay_date'   => date('Y-m-d', $holdCur),
+                        'booking_id'  => $id,
+                        'status'      => 'active',
+                        'created_at'  => date('Y-m-d H:i:s'),
+                    ]);
+                    $holdCur = strtotime('+1 day', $holdCur);
+                }
+            }
 
             DB::insert('booking_events', [
                 'booking_id' => $id,
@@ -218,16 +292,56 @@ final class BookingService
                 DB::run('UPDATE promos SET uses = uses + 1 WHERE code = ?', [$q['promoCode']]);
             }
 
+            /* Burn the gift-card credit for real, in the same transaction as
+               the reservation: the conditional UPDATE loses the race against a
+               second redemption of the same code, and this booking is rolled
+               back rather than double-spent. */
+            if ($gift > 0) {
+                $burn = DB::run(
+                    "UPDATE gift_cards
+                        SET balance = balance - ?,
+                            status  = CASE WHEN balance - ? <= 0 THEN 'redeemed' ELSE status END
+                      WHERE code = ? AND status = 'active' AND balance >= ?",
+                    [$gift, $gift, $giftCode, $gift]
+                );
+                if ($burn->rowCount() !== 1) {
+                    throw new RuntimeException('That gift card was used on another booking mid-checkout.');
+                }
+            }
+
+            $chargeAmount = !empty($in['split']) ? $q['halfNow'] : $q['total'];
             DB::insert('payments', [
                 'booking_id' => $id,
                 'user_id'    => $user['id'] ?? null,
                 'reference'  => $ref . '-P1',
                 'gateway'    => (string) config('payments.mode', 'record_only'),
-                'amount'     => !empty($in['split']) ? $q['halfNow'] : $q['total'],
+                'amount'     => $chargeAmount,
                 'currency'   => 'NGN',
                 'status'     => 'initiated',
                 'payload'    => json_encode(['method' => $method, 'split' => !empty($in['split'])]),
             ]);
+
+            // Phase 1 (WP04/WP05): Create PaymentIntent and post initial ledger holds
+            $intentKey = hash('sha256', "booking:$ref:$id:$chargeAmount");
+            $intent = PaymentService::createIntent($id, $chargeAmount * 100, 'booking', (int) ($user['id'] ?? 0), $intentKey, [
+                'booking_ref' => $ref,
+                'email'       => $email,
+                'name'        => $name,
+                'split'       => !empty($in['split']),
+            ]);
+
+            // If gift card credit was applied, post the gift liability transfer to escrow right now
+            if ($gift > 0) {
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_GIFT_LIABILITY, 'direction' => 'debit',  'amount_fen' => $gift * 100],
+                    ['account' => Ledger::ACCT_ESCROW,         'direction' => 'credit', 'amount_fen' => $gift * 100],
+                ], 'gift_redemption', (string) $giftCode, $id, (int) ($user['id'] ?? 0), 'Gift card credit applied to reservation');
+            }
+
+            // In demo/sandbox or record_only mode, auto-capture intent into escrow
+            if (config('payments.mode', 'record_only') === 'record_only' || config('payments.mode') === 'sandbox') {
+                PaymentService::captureIntent((int) $intent['id'], ['source' => 'record_only_checkout']);
+            }
 
             if ($user) {
                 DB::run('UPDATE users SET points = points + ? WHERE id = ?', [$points, (int) $user['id']]);
@@ -350,13 +464,26 @@ final class BookingService
         if (!$b) {
             return [false, 'Reservation not found.'];
         }
-        if ($actingUserId !== null && (int) $b['user_id'] !== $actingUserId && !Auth::isAdmin()) {
-            return [false, 'You cannot modify that reservation.'];
+        // Phase 2 (WP10/WP11): Role permissions on transition
+        if ($actingUserId !== null && !Auth::isAdmin()) {
+            $isGuest = (int) $b['user_id'] === $actingUserId;
+            $isHost = (int) DB::value('SELECT host_id FROM properties WHERE id = ?', [(int) $b['property_id']]) === $actingUserId;
+            if (in_array($action, ['approve', 'decline'], true)) {
+                if (!$isHost) {
+                    return [false, 'Only the property host can approve or decline this request (M08).'];
+                }
+            } elseif (!$isGuest && !$isHost) {
+                return [false, 'You cannot modify that reservation.'];
+            }
         }
 
+        /* The money machine, honestly: arrival flips the stay to active but
+           the host's payout waits for departure (escrow releases on CHECK-OUT
+           only); the old map released at check-in — guests could trigger it
+           and hosts could push it before anyone had slept there. */
         $map = [
-            'checkin'  => ['from' => ['confirmed'], 'to' => 'active',    'escrow' => 'released', 'msg' => 'Checked in — escrow released to the host.'],
-            'checkout' => ['from' => ['active'],    'to' => 'completed', 'escrow' => 'released', 'msg' => 'Check-out confirmed. Enjoy the rest of your day.'],
+            'checkin'  => ['from' => ['confirmed'], 'to' => 'active',    'escrow' => 'held',     'msg' => 'Checked in — enjoy the stay. The escrow stays held until check-out.'],
+            'checkout' => ['from' => ['active'],    'to' => 'completed', 'escrow' => 'released', 'msg' => 'Check-out confirmed — the escrow has been released to the host.'],
             'cancel'   => ['from' => ['pending', 'confirmed'], 'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Cancellation confirmed — refund on its way.'],
             'approve'  => ['from' => ['pending'],   'to' => 'confirmed', 'escrow' => 'held',     'msg' => 'Request approved.'],
             'decline'  => ['from' => ['pending'],   'to' => 'cancelled', 'escrow' => 'refunded', 'msg' => 'Request declined and refunded.'],
@@ -367,6 +494,25 @@ final class BookingService
         $step = $map[$action];
         if (!in_array((string) $b['status'], $step['from'], true)) {
             return [false, 'That action is not available for this reservation.'];
+        }
+        /* Time gate for the parties themselves (admin-console actions carry no
+           acting user and may still correct records by hand, with an audit
+           line): nobody checks in before the arrival day, nothing “checks
+           out” before the stay has run. */
+        if ($actingUserId !== null) {
+            if ($action === 'checkin') {
+                if ((string) ($b['checkin'] ?? '') > date('Y-m-d')) {
+                    return [false, 'Check-in opens on your arrival day (' . (string) $b['checkin'] . ').'];
+                }
+                // Phase 2 (WP10, A53/A54): Verify captured payment exists
+                $hasCaptured = Ledger::bookingEscrowBalance((int) $b['id']) > 0 || (string) ($b['status'] ?? '') === 'confirmed';
+                if (!$hasCaptured && (int) ($b['total'] ?? 0) > 0) {
+                    return [false, 'Check-in requires a confirmed, paid reservation (A53/A54).'];
+                }
+            }
+            if ($action === 'checkout' && (string) ($b['checkout'] ?? '') > date('Y-m-d')) {
+                return [false, 'Check-out is recorded on or after your departure day (' . (string) $b['checkout'] . ').'];
+            }
         }
 
         DB::update('bookings', [
@@ -383,8 +529,45 @@ final class BookingService
 
         if ($action === 'cancel' || $action === 'decline') {
             DB::run("UPDATE payments SET status = 'refunded' WHERE booking_id = ?", [(int) $b['id']]);
+            // Phase 2 (WP09/WP10): Release night holds on cancellation
+            if (DB::tableExists('night_holds')) {
+                DB::run("UPDATE night_holds SET status = 'released' WHERE booking_id = ?", [(int) $b['id']]);
+            }
+            $calc = Cancellations::compute($b);
+            $refundFen = $calc['refund_fen'];
+            if ($refundFen > 0) {
+                // Post ledger reversal from escrow to refund_out
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_ESCROW,     'direction' => 'debit',  'amount_fen' => $refundFen],
+                    ['account' => Ledger::ACCT_REFUND_OUT, 'direction' => 'credit', 'amount_fen' => $refundFen],
+                ], 'refund', 'CNL-' . $b['ref'], (int) $b['id'], (int) ($b['user_id'] ?? 0), 'Cancellation refund under ' . $calc['policy'] . ' policy (' . ($calc['pct'] * 100) . '%)');
+            }
             if ($b['user_id']) {
-                DB::run('UPDATE users SET points = GREATEST(0, points - ?) WHERE id = ?', [(int) $b['points_earned'], (int) $b['user_id']]);
+                $ptsRev = $calc['points_to_reverse'];
+                if ($ptsRev > 0) {
+                    DB::run('UPDATE users SET points = GREATEST(0, points - ?) WHERE id = ?', [$ptsRev, (int) $b['user_id']]);
+                    DB::insert('points_ledger', [
+                        'user_id'     => (int) $b['user_id'],
+                        'date_label'  => date('M j, Y'),
+                        'description' => 'Cancellation reversal · ' . ($b['property_name'] ?? $b['ref']),
+                        'amount'      => -$ptsRev,
+                        'kind'        => 'redeem',
+                    ]);
+                }
+            }
+        }
+        if ($action === 'checkout') {
+            // Release escrow to host earnings and platform commission
+            $heldFen = Ledger::bookingEscrowBalance((int) $b['id']);
+            if ($heldFen > 0) {
+                $takeRate = (float) Repo::setting('host_take_rate', 0.12);
+                $feeFen = (int) round($heldFen * $takeRate);
+                $hostFen = max(0, $heldFen - $feeFen);
+                Ledger::postTransaction([
+                    ['account' => Ledger::ACCT_ESCROW,        'direction' => 'debit',  'amount_fen' => $heldFen],
+                    ['account' => Ledger::ACCT_HOST_EARNINGS, 'direction' => 'credit', 'amount_fen' => $hostFen],
+                    ['account' => Ledger::ACCT_PLATFORM_FEE,   'direction' => 'credit', 'amount_fen' => $feeFen],
+                ], 'checkout_release', 'REL-' . $b['ref'], (int) $b['id'], (int) ($b['user_id'] ?? 0), 'Escrow settled on verified checkout');
             }
         }
         if ($action === 'checkin') {
@@ -415,6 +598,30 @@ final class BookingService
             'message' => json_encode($in),
             'meta'    => $ref,
         ]);
+
+        // Phase 2 (WP10): Record in booking_changes with re-quoted delta
+        if (DB::tableExists('booking_changes')) {
+            $prop = Repo::propertyById((int) $b['property_id']);
+            $newCheckin = (string) ($in['checkin'] ?: $b['checkin']);
+            $newCheckout = (string) ($in['checkout'] ?: $b['checkout']);
+            $newGuests = (int) ($in['guests'] ?: $b['guests']);
+            $newNights = nights_between($newCheckin, $newCheckout);
+            $newQuote = $prop ? Pricing::quote($prop, $newNights, [], '', 0, $newCheckin, $newCheckout) : [];
+            $deltaNaira = ((int) ($newQuote['total'] ?? $b['total'])) - (int) $b['total'];
+
+            DB::insert('booking_changes', [
+                'booking_id'        => (int) $b['id'],
+                'proposed_checkin'  => $newCheckin,
+                'proposed_checkout' => $newCheckout,
+                'proposed_guests'   => $newGuests,
+                'delta_quote'       => json_encode(['new_quote' => $newQuote, 'delta' => $deltaNaira]),
+                'status'            => 'pending_host',
+                'note'              => (string) ($in['note'] ?? ''),
+                'expires_at'        => date('Y-m-d H:i:s', strtotime('+72 hours')),
+                'created_at'        => date('Y-m-d H:i:s'),
+            ]);
+        }
+
         return [true, 'Modification requested — the host will confirm shortly.'];
     }
 }
