@@ -7,5 +7,19 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('neighborhoods');
+$img = static fn(?string $key): string => View::imgUrl($key);
+$cards = array_map(static fn(array $n) => [
+    'href'  => url('neighborhood.php?n=' . rawurlencode((string) $n['id'])),
+    'img'   => $img((string) $n['img']),
+    'alt'   => $n['name'] . ' neighbourhood guide',
+    'title' => (string) $n['name'],
+    'meta'  => ($n['avg'] > 0 ? e('from ' . money($n['avg']) . '/night · ') : '') . e((string) $n['stays'] . ' stays'),
+], Repo::neighborhoods(true));
+$ssr = SSR::hero(
+        'Neighbourhood guides',
+        'Where to stay in Lagos & Abuja',
+        'Insider guides to every area we serve — dining, nightlife, transport, safety and what a night really costs.'
+    )
+    . SSR::linkCards($cards, 12);
+View::header('neighborhoods', ['ssr' => $ssr]);
 View::footer();

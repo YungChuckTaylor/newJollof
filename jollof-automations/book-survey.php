@@ -7,6 +7,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Book an On-Site Engineering Audit · Jollof Automations';
+$pageDesc  = 'Book an on-site engineering audit for your residence in Lagos or Abuja — our team designs your smart home proposal within 48 hours.';
+$noindex   = false;
 $activeNav = 'survey';
 
 $prefillBudget = trim((string) ($_GET['budget'] ?? '₦14,300,000'));

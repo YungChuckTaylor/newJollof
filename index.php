@@ -7,5 +7,49 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('index');
+$props    = Repo::properties(true);
+$featured = array_values(array_filter($props, static fn($p) => !empty($p['featured'])));
+if (count($featured) < 3) {
+    $featured = $props;
+}
+
+$img = static fn(?string $key): string => View::imgUrl($key);
+
+$collectionCards = array_map(static fn(array $c) => [
+    'href'  => url('stays.php?collection=' . rawurlencode((string) $c['id'])),
+    'img'   => $img((string) $c['img']),
+    'alt'   => $c['name'] . ' — curated collection of luxury stays',
+    'title' => (string) $c['name'],
+    'meta'  => e((string) ($c['sub'] ?? '')),
+], Repo::collections());
+
+$experienceCards = array_map(static fn(array $x) => [
+    'href'  => url('experiences.php#' . rawurlencode((string) $x['id'])),
+    'img'   => $img((string) $x['img']),
+    'alt'   => $x['name'] . ' — luxury experience in Nigeria',
+    'title' => (string) $x['name'],
+    'meta'  => e(money((int) $x['price'])) . ($x['dur'] !== null && $x['dur'] !== '' ? ' · ' . e((string) $x['dur']) : ''),
+], Repo::experiences());
+
+$ssr = SSR::hero(
+        'Luxury Living, African Soul',
+        'Luxury short-let apartments in Lagos & Abuja',
+        'Exclusive, verified residences with hotel-grade service, escrow-protected payments and a 24/7 AI concierge.',
+        url('stays.php'),
+        'Browse the collection'
+    )
+    . SSR::secHead('Signature residences', 'Featured stays this week', 'The homes our guests rate highest — inspected in person before they go live.')
+    . SSR::stayGrid($featured, 6, false)
+    . SSR::cta(url('stays.php'), 'View all residences')
+    . SSR::secHead('Curated for you', 'Browse by collection', 'Waterfront escapes, sky penthouses, heritage homes and more.')
+    . SSR::linkCards($collectionCards, 6)
+    . SSR::secHead('Beyond the residence', 'Experiences worth the trip', 'Private chefs, boat cruises, spa rituals and art tours — added to any booking.')
+    . SSR::linkCards($experienceCards, 4)
+    . SSR::testimonials(Repo::testimonials(), 3)
+    . SSR::cta(url('host.php'), 'List your residence', url('membership.php'), 'Join Jollof Club');
+
+View::header('index', [
+    'preloadImage' => View::imgUrl('hero'),
+    'ssr'          => $ssr,
+]);
 View::footer();

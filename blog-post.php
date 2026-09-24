@@ -17,15 +17,87 @@ if (!$post) {
     exit;
 }
 
+$title   = (string) $post['title'];
+$excerpt = (string) $post['excerpt'];
+$photo   = View::imgUrl((string) $post['img']);
+$photoJpg = View::imgUrl((string) $post['img'], false);
+
+$body = '';
+foreach ((array) $post['body'] as $para) {
+    if (is_string($para) && $para !== '') {
+        $body .= '<p>' . e($para) . '</p>';
+    }
+}
+
+/* Keep readers in the cluster: more Journal posts, then homes to book. */
+$more = array_values(array_filter(Repo::blogPosts(), static fn(array $b) => $b['slug'] !== $post['slug']));
+$moreCards = array_map(static fn(array $b) => [
+    'href'  => url('blog-post.php?s=' . rawurlencode((string) $b['slug'])),
+    'img'   => View::imgUrl((string) $b['img']),
+    'alt'   => $b['title'] . ' — from the Jollof Living Journal',
+    'title' => (string) $b['title'],
+    'meta'  => e((string) ($b['date'] ?? '')),
+], array_slice($more, 0, 3));
+
+$ssr = SSR::crumbs([
+        ['Home', url('')],
+        ['The Journal', url('blog.php')],
+        [$title, null],
+    ])
+    . '<article class="wrap ssr-article">'
+    . '<header class="ssr-stay-head">'
+    . '<p class="ssr-stay-meta">' . e(trim(((string) ($post['cat'] ?? '') !== '' ? (string) $post['cat'] . ' · ' : '')
+        . (string) ($post['date'] ?? '') . (($post['read'] ?? '') !== '' ? ' · ' . (string) $post['read'] : ''), ' ·')) . '</p>'
+    . '<h1>' . e($title) . '</h1>'
+    . '</header>'
+    . '<img class="ssr-stay-photo" src="' . e($photo) . '" alt="' . e($title) . '" width="1200" height="675">'
+    . $body
+    . SSR::cta(url('stays.php'), 'Browse luxury stays')
+    . '</article>'
+    . SSR::secHead('Keep reading', 'More from the Journal')
+    . SSR::linkCards($moreCards, 3);
+
+$publishedIso = null;
+if (!empty($post['created'])) {
+    $ts = strtotime((string) $post['created']);
+    $publishedIso = $ts ? gmdate('c', $ts) : null;
+}
+$jsonld = [[
+    '@context'            => 'https://schema.org',
+    '@type'               => 'Article',
+    'headline'            => mb_substr($title, 0, 110),
+    'description'         => $excerpt !== '' ? mb_substr($excerpt, 0, 300) : null,
+    'image'               => View::absoluteAsset($photoJpg),
+    'url'                 => View::absoluteAsset('/blog/' . rawurlencode((string) $post['slug'])),
+    'inLanguage'          => 'en-NG',
+    'datePublished'       => $publishedIso,
+    'author'              => ['@type' => 'Organization', 'name' => 'Jollof Living',
+                              'url' => View::absoluteAsset('/')],
+    'publisher'           => [
+        '@type' => 'Organization',
+        'name'  => 'Jollof Living',
+        'logo'  => ['@type' => 'ImageObject', 'url' => View::absoluteAsset('/assets/img/logo-dark.png')],
+    ],
+    'isPartOf'            => ['@id' => View::absoluteAsset('/') . '#website'],
+], [
+    '@context'        => 'https://schema.org',
+    '@type'           => 'BreadcrumbList',
+    'itemListElement' => [
+        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => View::absoluteAsset('/')],
+        ['@type' => 'ListItem', 'position' => 2, 'name' => 'The Journal', 'item' => View::absoluteAsset('/blog')],
+        ['@type' => 'ListItem', 'position' => 3, 'name' => $title],
+    ],
+]];
+
 View::header('blog-' . $post['slug'], [
-    'metaKey' => 'blog',
-    'title'   => $post['title'] . ' | The Journal — Jollof Living',
-    'desc'    => mb_substr(strip_tags((string) $post['excerpt']), 0, 300),
-    'image'   => base_path() . '/assets/img/' . (View::images()[$post['img']] ?? 'hero.jpg'),
-    'extra'   => ['post' => $post],
+    'metaKey'      => 'blog',
+    'title'        => $title . ' | The Journal — Jollof Living',
+    'desc'         => $excerpt !== '' ? $excerpt : $title,
+    'image'        => $photoJpg,
+    'ogType'       => 'article',
+    'preloadImage' => $photo,
+    'jsonld'       => $jsonld,
+    'extra'        => ['post' => $post],
+    'ssr'          => $ssr,
 ]);
-View::noscript(
-    '<h1>' . e($post['title']) . '</h1>'
-    . implode('', array_map(static fn($p) => '<p>' . e($p) . '</p>', $post['body']))
-);
 View::footer();

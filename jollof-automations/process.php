@@ -7,6 +7,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Our 5-Phase Engineering Process & Standards · Jollof Automations';
+$pageDesc  = 'From survey to aftercare: the five-phase engineering process behind every Jollof Automations installation — audit, design, build, commission, support.';
+$noindex   = false;
 $activeNav = 'process';
 
 require_once __DIR__ . '/includes/header.php';

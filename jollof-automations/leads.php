@@ -8,6 +8,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Site Survey Leads & Inquiries · Jollof Automations Management';
+$pageDesc  = 'Internal back-office leads dashboard for the Jollof Automations engineering team.';
+$noindex   = true;
 $activeNav = 'leads';
 
 // Handle status updates

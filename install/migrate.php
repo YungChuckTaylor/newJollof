@@ -97,6 +97,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
         $count = run_migration($migrationFile);
         $steps[] = $count . ' SQL statements executed (tables, indexes and seed rows).';
 
+        // 2026_09_24 — SEO metadata: keyword-first titles + SERP-length
+        // descriptions for every public page. The SQL is idempotent (guarded
+        // updates + missing-row inserts), so it is safe on every run.
+        $seoFile = __DIR__ . '/schema/2026_09_24_seo_metadata.sql';
+        if (is_file($seoFile)) {
+            $seoCount = run_migration($seoFile);
+            $steps[] = $seoCount . ' SEO metadata statements applied (keyword-first titles).';
+        }
+
         // Anything the SQL seed could not cover on a database that already has
         // users: make sure the administrator is also a chat agent, and that the
         // chat settings exist even on an older snapshot.

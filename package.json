@@ -1,0 +1,12 @@
+{
+  "name": "jollof-living",
+  "private": true,
+  "type": "module",
+  "description": "Jollof Living — production asset build (minified CSS/JS for Core Web Vitals)",
+  "scripts": {
+    "build": "node tools/build-assets.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

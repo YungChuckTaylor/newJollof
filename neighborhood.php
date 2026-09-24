@@ -17,11 +17,50 @@ if (!$hood) {
     exit;
 }
 
+$hoodName = (string) $hood['name'];
+$hoodDesc = (string) $hood['desc'];
+
+/* Residences physically inside (or near) this neighbourhood. */
+$inHood = array_values(array_filter(Repo::properties(true), static fn(array $p) =>
+    strcasecmp((string) $p['area'], $hoodName) === 0));
+
+$ssr = SSR::crumbs([
+        ['Home', url('')],
+        ['Neighbourhoods', url('neighborhoods.php')],
+        [$hoodName, null],
+    ])
+    . SSR::hero(
+        'Neighbourhood guide',
+        $hoodName,
+        ($hood['tag'] ?? '') !== '' ? (string) $hood['tag'] : $hoodDesc
+    )
+    . '<div class="wrap"><p class="ssr-facts">'
+    . ($hood['avg'] > 0 ? 'Average nightly rate <strong>' . e(money((int) $hood['avg'])) . '</strong> · ' : '')
+    . e((string) $hood['stays']) . ' Jollof Living residences</p>'
+    . ($hoodDesc !== '' && (string) ($hood['tag'] ?? '') !== '' ? '<p class="ssr-lead">' . e($hoodDesc) . '</p>' : '')
+    . '</div>'
+    . SSR::secHead('Stay here', 'Residences in ' . $hoodName)
+    . ($inHood
+        ? SSR::stayGrid($inHood, 6)
+        : SSR::cta(url('stays.php'), 'Browse all residences'));
+
+$jsonld = [[
+    '@context'        => 'https://schema.org',
+    '@type'           => 'BreadcrumbList',
+    'itemListElement' => [
+        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => View::absoluteAsset('/')],
+        ['@type' => 'ListItem', 'position' => 2, 'name' => 'Neighbourhoods', 'item' => View::absoluteAsset('/neighborhoods')],
+        ['@type' => 'ListItem', 'position' => 3, 'name' => $hoodName],
+    ],
+]];
+
 View::header('neighborhood-' . $hood['id'], [
     'metaKey' => 'neighborhoods',
-    'title'   => $hood['name'] . ' — Neighbourhood Guide | Jollof Living',
-    'desc'    => mb_substr(strip_tags((string) $hood['desc']), 0, 300),
+    'title'   => $hoodName . ' Neighbourhood Guide — Where to Stay | Jollof Living',
+    'desc'    => mb_substr('Staying in ' . $hoodName . ': ' . ($hood['tag'] ?? '') . ' ' . $hoodDesc, 0, 158),
+    'image'   => View::imgUrl((string) $hood['img'], false),
+    'jsonld'  => $jsonld,
     'extra'   => ['hood' => $hood],
+    'ssr'     => $ssr,
 ]);
-View::noscript('<h1>' . e($hood['name']) . '</h1><p>' . e((string) $hood['desc']) . '</p>');
 View::footer();

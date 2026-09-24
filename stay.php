@@ -19,24 +19,118 @@ if (!$property || $property['status'] !== 'live') {
 
 Repo::recordView((int) $property['pid']);
 
+$stayUrl    = url('stay.php?p=' . rawurlencode((string) $property['id']));
+$bookingUrl = url('booking.php?p=' . rawurlencode((string) $property['id']));
+$name  = (string) $property['name'];
+$area  = (string) $property['area'];
+$city  = (string) $property['city'];
+$desc  = (string) $property['desc'];
+$photo = View::imgUrl((string) $property['img']);
+$photoJpg = View::imgUrl((string) $property['img'], false);
+$photoAlt  = $name . ' — ' . $area . ', ' . $city;
+
+/* Related residences: same city first, then anything else. */
+$all     = Repo::properties(true);
+$related = array_values(array_filter($all, static fn(array $p) =>
+    $p['pid'] !== $property['pid'] && strcasecmp((string) $p['city'], $city) === 0));
+if (count($related) < 3) {
+    $extra = array_values(array_filter($all, static fn(array $p) => $p['pid'] !== $property['pid']));
+    foreach ($extra as $p) {
+        if (count($related) >= 3) {
+            break;
+        }
+        $related[] = $p;
+    }
+}
+
+$beds  = rtrim(rtrim((string) $property['beds'], '0'), '.');
+$baths = rtrim(rtrim((string) $property['baths'], '0'), '.');
+
+$specs = '<ul class="ssr-specs">'
+    . '<li>' . SSR::icon('bed') . ' ' . e($beds) . ' bedrooms</li>'
+    . '<li>' . SSR::icon('bath') . ' ' . e($baths) . ' bathrooms</li>'
+    . '<li>' . SSR::icon('users') . ' sleeps ' . (int) $property['guests'] . '</li>'
+    . '<li>' . SSR::icon('star') . ' ' . e(number_format((float) $property['rating'], 2))
+    . ' (' . (int) $property['reviews'] . ' verified reviews)</li>'
+    . '</ul>';
+
+$ssr = SSR::crumbs([
+        ['Home', url('')],
+        ['Stays', url('stays.php')],
+        [$name, null],
+    ])
+    . '<article class="wrap ssr-article">'
+    . '<header class="ssr-stay-head"><h1>' . e($name) . '</h1>'
+    . '<p class="ssr-stay-loc">' . SSR::icon('pin') . ' ' . e($area) . ', ' . e($city) . ' · ' . e((string) $property['type']) . '</p>'
+    . '<p class="ssr-stay-price"><strong>' . e(money((int) $property['price'])) . '</strong> per night'
+    . (!empty($property['oldPrice']) ? ' <s>' . e(money((int) $property['oldPrice'])) . '</s>' : '') . '</p>'
+    . '</header>'
+    . '<img class="ssr-stay-photo" src="' . e($photo) . '" alt="' . e($photoAlt) . '" width="1200" height="800">'
+    . '<p class="ssr-lead">' . e($desc) . '</p>'
+    . $specs
+    . SSR::cta($bookingUrl, 'Check availability', $stayUrl, 'View full details')
+    . '</article>'
+    . SSR::secHead('Keep exploring', 'More luxury stays in ' . $city)
+    . SSR::stayGrid($related, 3);
+
+/* Structured data: Accommodation + Offer + AggregateRating, plus breadcrumbs. */
+$accommodation = [
+    '@context'              => 'https://schema.org',
+    '@type'                 => 'Accommodation',
+    'name'                  => $name,
+    'description'           => $desc !== '' ? mb_substr($desc, 0, 300) : null,
+    'image'                 => View::absoluteAsset($photoJpg),
+    'url'                   => View::absoluteAsset('/stay/' . rawurlencode((string) $property['id'])),
+    'address'               => [
+        '@type'           => 'PostalAddress',
+        'addressLocality' => $area,
+        'addressRegion'   => $city,
+        'addressCountry'  => 'NG',
+    ],
+    'numberOfBedroomsTotal' => (int) $property['beds'],
+    'numberOfBathroomsTotal'=> (int) $property['baths'],
+    'occupancy'             => ['@type' => 'QuantitativeValue', 'maxValue' => (int) $property['guests']],
+    'offers'                => [
+        '@type'        => 'Offer',
+        'price'        => (int) $property['price'],
+        'priceCurrency' => 'NGN',
+        'availability' => empty($property['soldOut'])
+            ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
+        'url'          => View::absoluteAsset('/stay/' . rawurlencode((string) $property['id'])),
+    ],
+];
+if ((float) $property['rating'] > 0 && (int) $property['reviews'] > 0) {
+    $accommodation['aggregateRating'] = [
+        '@type'       => 'AggregateRating',
+        'ratingValue' => (float) $property['rating'],
+        'reviewCount' => (int) $property['reviews'],
+        'bestRating'  => 5,
+    ];
+}
+$jsonld = [$accommodation, [
+    '@context'        => 'https://schema.org',
+    '@type'           => 'BreadcrumbList',
+    'itemListElement' => [
+        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => View::absoluteAsset('/')],
+        ['@type' => 'ListItem', 'position' => 2, 'name' => 'Stays', 'item' => View::absoluteAsset('/stays')],
+        ['@type' => 'ListItem', 'position' => 3, 'name' => $name],
+    ],
+]];
+
 $extra = [
     'stay'    => $property,
     'blocked' => BookingService::blockedRanges((int) $property['pid']),
 ];
 
 View::header('stay-' . $property['id'], [
-    'metaKey' => 'stays',
-    'title'   => $property['name'] . ' — Luxury Stay | Jollof Living',
-    'desc'    => mb_substr(strip_tags((string) $property['desc']), 0, 300),
-    'image'   => base_path() . '/assets/img/' . (View::images()[$property['img']] ?? 'hero.jpg'),
-    'extra'   => $extra,
+    'metaKey'      => 'stays',
+    'title'        => $name . ' — ' . $area . ', ' . $city . ' | Jollof Living',
+    'desc'         => $desc !== '' ? $desc : ('Book ' . $name . ' in ' . $area . ', ' . $city . ' from ' . money((int) $property['price']) . ' per night.'),
+    'image'        => $photoJpg,
+    'ogType'       => 'article',
+    'preloadImage' => $photo,
+    'jsonld'       => $jsonld,
+    'extra'        => $extra,
+    'ssr'          => $ssr,
 ]);
-View::noscript(
-    '<h1>' . e($property['name']) . '</h1>'
-    . '<p>' . e((string) $property['area']) . ', ' . e((string) $property['city']) . ' · '
-    . e(money((int) $property['price'])) . ' per night · ' . e((string) $property['rating']) . '★ ('
-    . (int) $property['reviews'] . ' reviews)</p>'
-    . '<p>' . e((string) $property['desc']) . '</p>'
-    . '<p><a href="' . e(url('booking.php?p=' . urlencode($property['id']))) . '">Reserve this residence</a></p>'
-);
 View::footer();

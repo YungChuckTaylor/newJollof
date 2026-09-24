@@ -7,5 +7,13 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('stays');
+$ssr = SSR::hero(
+        'The Collection',
+        'Luxury stays in Lagos & Abuja',
+        'Every residence is verified in person. Filter by area, price, guests and amenities — then book instantly with escrow protection.',
+        url('map.php'),
+        'Explore on the map'
+    )
+    . SSR::stayGrid(Repo::properties(true), 12, false);
+View::header('stays', ['ssr' => $ssr]);
 View::footer();

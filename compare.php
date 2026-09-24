@@ -9,5 +9,12 @@ require JL_INC . '/view.php';
 
 Auth::requireLogin();
 
-View::header('compare');
+$ssr = SSR::hero(
+        'Compare',
+        'Compare residences side by side',
+        'Up to three residences at once — pricing, ratings, bedrooms and amenities. Tap Compare on any residence to add it here.',
+        url('stays.php'),
+        'Choose residences to compare'
+    );
+View::header('compare', ['ssr' => $ssr]);
 View::footer();

@@ -16,9 +16,43 @@ if (!defined('JL_ROOT')) {
 
 if (class_exists('View', false)) { return; }
 
+require_once __DIR__ . '/ssr.php';
+
 final class View
 {
-    /** Registry of the images shipped in assets/img. */
+    /** Pages that must never be indexed (private app surfaces + error page). */
+    private const NOINDEX_PAGES = [
+        '404', 'auth', 'account', 'trips', 'messages', 'notifications', 'payments',
+        'confirm', 'host-dashboard', 'host-onboarding', 'admin', 'admin-login',
+        'agent', 'reset', 'verify-email', 'wishlist',
+    ];
+
+    /** Public pages that have clean pretty URLs (mirrors .htaccess + site.js PAGE_MAP). */
+    private const PRETTY_PATHS = [
+        'index.php'        => '/',
+        'stays.php'        => '/stays',
+        'experiences.php'  => '/experiences',
+        'neighborhoods.php'=> '/neighborhoods',
+        'collections.php'  => '/collections',
+        'membership.php'   => '/membership',
+        'blog.php'         => '/blog',
+        'reviews.php'      => '/reviews',
+        'help.php'         => '/help',
+        'host.php'         => '/host',
+        'about.php'        => '/about',
+        'business.php'     => '/business',
+        'giftcards.php'    => '/giftcards',
+        'referral.php'     => '/referral',
+        'app.php'          => '/app',
+        'future.php'       => '/future',
+        'map.php'          => '/map',
+        'concierge.php'    => '/concierge',
+        'compare.php'      => '/compare',
+        'auth.php'         => '/auth',
+        'automations.php'  => '/automations/',
+    ];
+
+    /** Registry of the images shipped in assets/img. WebP copies win when present. */
     public static function images(): array
     {
         static $map = null;
@@ -30,9 +64,30 @@ final class View
         foreach (glob($dir . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE) ?: [] as $f) {
             $base = basename($f);
             $key = pathinfo($base, PATHINFO_FILENAME);
-            $map[$key] = $base;
+            $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+            if ($ext === 'webp' || !isset($map[$key])) {
+                $map[$key] = $base;
+            }
         }
         return $map;
+    }
+
+    /** Resolve an image key to a site-relative URL. $webp=false forces a raster fallback for og:image. */
+    public static function imgUrl(?string $key, bool $webp = true): string
+    {
+        $key = (string) $key;
+        if ($webp) {
+            $map = self::images();
+            if (isset($map[$key])) {
+                return base_path() . '/assets/img/' . $map[$key];
+            }
+        }
+        foreach (['jpg', 'jpeg', 'png'] as $ext) {
+            if (is_file(JL_ROOT . '/assets/img/' . $key . '.' . $ext)) {
+                return base_path() . '/assets/img/' . $key . '.' . $ext;
+            }
+        }
+        return base_path() . '/assets/img/hero.jpg';
     }
 
     /**
@@ -271,8 +326,15 @@ final class View
         $meta = Repo::pageMeta($opts['metaKey'] ?? $page);
         $title = $opts['title'] ?? $meta['title'];
         $desc  = $opts['desc'] ?? $meta['desc'];
+        /* SERP snippets truncate around 155-160 characters — keep the meta
+           description inside that budget no matter what the CMS row holds. */
+        if (mb_strlen($desc) > 158) {
+            $desc = rtrim(mb_substr($desc, 0, 155)) . '…';
+        }
         $payload = self::payload($page, $opts['extra'] ?? []);
-        $ogImage = $opts['image'] ?? (base_path() . '/assets/img/hero.jpg');
+        /* og:image MUST be an absolute URL — Facebook, LinkedIn and WhatsApp
+           ignore relative ones, and WhatsApp is a primary share channel. */
+        $ogImage = self::absoluteAsset($opts['image'] ?? '/assets/img/hero.jpg');
         $canonical = self::canonical();
         $nav = self::navSection($page);
         $state = $payload['state'];
@@ -280,6 +342,44 @@ final class View
         $unreadM = (int) ($state['unreadMsgs'] ?? 0);
         $wlCount = array_sum(array_map('count', $state['wishlists'] ?? []));
         $user = $payload['user'];
+
+        /* --- SEO plumbing --------------------------------------------- */
+        $noindex = $opts['noindex'] ?? in_array($page, self::NOINDEX_PAGES, true);
+        $cssHref = is_file(JL_ROOT . '/assets/css/site.min.css')
+            ? asset('assets/css/site.min.css') : asset('assets/css/site.css');
+        $ga4 = trim((string) config('site.ga4_id', ''));
+        $gtm = trim((string) config('site.gtm_id', ''));
+        $gsc = trim((string) config('site.google_verification', ''));
+        $bing = trim((string) config('site.bing_verification', ''));
+        $siteName = (string) ($payload['siteName'] ?? 'Jollof Living');
+        /* Structured data: an Organization + WebSite graph site-wide, plus
+           whatever page-level nodes the template passed in. */
+        $orgId = rtrim(self::canonicalBase(), '/') . '/#organization';
+        $jsonld = array_merge([
+            [
+                '@context' => 'https://schema.org',
+                '@type'    => 'Organization',
+                '@id'      => $orgId,
+                'name'     => $siteName,
+                'url'      => rtrim(self::canonicalBase(), '/') . '/',
+                'logo'     => self::absoluteAsset('/assets/img/logo-dark.png'),
+                'contactPoint' => [[
+                    '@type'       => 'ContactPoint',
+                    'email'       => (string) ($payload['contactEmail'] ?? 'hello@jollofliving.com'),
+                    'contactType' => 'customer service',
+                    'areaServed'  => 'NG',
+                ]],
+            ],
+            [
+                '@context'   => 'https://schema.org',
+                '@type'      => 'WebSite',
+                '@id'        => rtrim(self::canonicalBase(), '/') . '/#website',
+                'url'        => rtrim(self::canonicalBase(), '/') . '/',
+                'name'       => $siteName,
+                'publisher'  => ['@id' => $orgId],
+                'inLanguage' => 'en-NG',
+            ],
+        ], $opts['jsonld'] ?? []);
         ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -289,24 +389,52 @@ final class View
 <title><?= e($title) ?></title>
 <meta name="description" content="<?= e($desc) ?>">
 <link rel="canonical" href="<?= e($canonical) ?>">
+<?php if ($noindex): ?><meta name="robots" content="noindex, follow">
+<?php endif;
+if ($gsc !== ''): ?><meta name="google-site-verification" content="<?= e($gsc) ?>">
+<?php endif;
+if ($bing !== ''): ?><meta name="msvalidate.01" content="<?= e($bing) ?>">
+<?php endif; ?>
+<meta property="og:site_name" content="<?= e($siteName) ?>">
+<meta property="og:locale" content="en_NG">
 <meta property="og:title" content="<?= e($title) ?>">
 <meta property="og:description" content="<?= e($desc) ?>">
-<meta property="og:type" content="website">
+<meta property="og:type" content="<?= e($opts['ogType'] ?? 'website') ?>">
 <meta property="og:url" content="<?= e($canonical) ?>">
 <meta property="og:image" content="<?= e($ogImage) ?>">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="<?= e($title) ?>">
+<meta name="twitter:description" content="<?= e($desc) ?>">
+<meta name="twitter:image" content="<?= e($ogImage) ?>">
 <link rel="icon" type="image/png" href="<?= e(asset('assets/img/favicon.png')) ?>">
-<link rel="preload" as="style" href="<?= e(asset('assets/css/site.css')) ?>">
-<link rel="stylesheet" href="<?= e(asset('assets/css/site.css')) ?>">
+<link rel="preload" as="style" href="<?= e($cssHref) ?>">
+<link rel="stylesheet" href="<?= e($cssHref) ?>">
+<link rel="preload" as="font" type="font/woff2" href="<?= e(asset('assets/fonts/cg-normal.woff2')) ?>" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="<?= e(asset('assets/fonts/jost-normal.woff2')) ?>" crossorigin>
+<?php if (!empty($opts['preloadImage'])): ?><link rel="preload" as="image" href="<?= e(self::absoluteAsset((string) $opts['preloadImage'])) ?>" fetchpriority="high">
+<?php endif;
+foreach ($jsonld as $node):
+    if (empty($node['@type'])) { continue; }
+?>
+<script type="application/ld+json"><?= json_js($node) ?></script>
+<?php endforeach;
+if ($gtm !== ''): ?>
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','<?= e($gtm) ?>');</script>
+<?php elseif ($ga4 !== ''): ?>
+<script async src="https://www.googletagmanager.com/gtag/js?id=<?= e($ga4) ?>"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','<?= e($ga4) ?>');</script>
+<?php endif; ?>
 <script>window.JL = <?= json_js($payload) ?>;</script>
 </head>
 <body data-page="<?= e($page) ?>"<?= isset($opts['bodyClass']) ? ' class="' . e($opts['bodyClass']) . '"' : '' ?>>
+<?php if ($gtm !== ''): ?><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=<?= e($gtm) ?>" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<?php endif; ?>
 
 <!-- ================= HEADER ================= -->
 <header id="header">
   <div class="wrap nav">
     <a class="brand" href="<?= e(url('')) ?>" aria-label="Jollof Living home">
-      <img id="brandImg" alt="Jollof Living">
+      <img id="brandImg" src="<?= e(View::imgUrl('logo-dark')) ?>" alt="Jollof Living — luxury stays in Lagos &amp; Abuja" width="150" height="40">
     </a>
     <nav class="nav-links" id="navLinks" aria-label="Primary">
       <a href="<?= e(url('')) ?>" data-r="/"<?= $nav === '/' ? ' class="active"' : '' ?>>Home</a>
@@ -393,7 +521,16 @@ final class View
   </aside>
 </div>
 
-<main id="view"><div class="page-loading"><div class="pl-mark"></div><p>Jollof Living</p></div></main>
+<main id="view"><?php
+$ssr = $opts['ssr'] ?? null;
+if (is_string($ssr) && $ssr !== '') {
+    /* Server-rendered content: crawlable, no-JS friendly, instant paint.
+       site.js replaces #view's contents wholesale once it boots. */
+    echo '<div id="ssr-content" data-ssr="' . e($page) . '">' . $ssr . '</div>';
+} else {
+    echo '<div class="page-loading"><div class="pl-mark"></div><p>Jollof Living</p></div>';
+}
+?></main>
 <?php
     }
 
@@ -410,14 +547,54 @@ final class View
         return '';
     }
 
-    private static function canonical(): string
+    /** Site base URL without trailing slash (config, or detected from the request). */
+    private static function canonicalBase(): string
     {
         $base = rtrim((string) config('site.url', ''), '/');
         if ($base === '') {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') ? 'https' : 'http';
             $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
         }
-        $path = strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+        return $base;
+    }
+
+    /** Turn a site-relative path (or any URL) into an absolute URL. */
+    public static function absoluteAsset(string $path): string
+    {
+        if (preg_match('~^https?://~i', $path)) {
+            return $path;
+        }
+        return absolute_url($path);
+    }
+
+    /**
+     * Canonical URL for the current request. Query-string entry points are
+     * canonicalised onto their pretty path (/stay.php?p=onyx → /stay/onyx)
+     * so search engines only ever see one URL per page.
+     */
+    private static function canonical(): string
+    {
+        $base = self::canonicalBase();
+        $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        $q = static fn(string $k): string => trim((string) ($_GET[$k] ?? ''));
+
+        $path = self::PRETTY_PATHS[$script] ?? null;
+        if ($script === 'stay.php' && $q('p') !== '') {
+            $path = '/stay/' . rawurlencode($q('p'));
+        } elseif ($script === 'booking.php' && $q('p') !== '') {
+            $path = '/booking/' . rawurlencode($q('p'));
+        } elseif ($script === 'neighborhood.php' && $q('n') !== '') {
+            $path = '/neighborhood/' . rawurlencode($q('n'));
+        } elseif ($script === 'blog-post.php') {
+            $path = $q('s') !== '' ? '/blog/' . rawurlencode($q('s')) : '/blog';
+        } elseif ($script === 'confirm.php' && $q('ref') !== '') {
+            $path = '/confirm/' . rawurlencode($q('ref'));
+        }
+        if ($path === null) {
+            // Unmapped script (private app pages, API, …): keep the request path.
+            $path = (string) strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+        }
         return $base . $path;
     }
 
@@ -427,14 +604,21 @@ final class View
         $year = date('Y');
         $domain = (string) Repo::setting('site_domain', 'www.jollofliving.com');
         $cur = active_currency();
+        $contactEmail = (string) Repo::setting('contact_email', 'hello@jollofliving.com');
+        $contactPhone = (string) Repo::setting('contact_phone', '');
         ?>
 <!-- ================= FOOTER ================= -->
 <footer id="footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <img id="footLogo" alt="Jollof Living">
+        <img id="footLogo" src="<?= e(View::imgUrl('logo-light')) ?>" alt="Jollof Living" width="150" height="40">
         <p>A premium platform for luxurious high-end apartments — exclusive short and long-term stays, inspired by the vibrant culture and warmth of Nigeria.</p>
+          <address class="ssr-nap">
+            Lagos &middot; Abuja, Nigeria<br>
+            <a href="mailto:<?= e($contactEmail) ?>"><?= e($contactEmail) ?></a><?php if ($contactPhone !== ''): ?><br>
+            <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $contactPhone)) ?>"><?= e($contactPhone) ?></a><?php endif; ?>
+          </address>
         <div class="newsletter">
           <input type="email" id="newsInput" placeholder="Email for private openings" autocomplete="email">
           <button id="newsBtn" aria-label="Subscribe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
@@ -473,11 +657,10 @@ final class View
         <h4>Company</h4>
         <ul>
           <li><a href="<?= e(url('about.php')) ?>">About &amp; compliance</a></li>
-          <li><a href="<?= e(url('automations.php')) ?>"><b>Jollof Automations</b> ⚡</a></li>
+          <li><a href="<?= e(base_path() . '/automations/') ?>"><b>Jollof Automations</b> ⚡</a></li>
           <li><a href="<?= e(url('business.php')) ?>">Jollof for Business</a></li>
           <li><a href="<?= e(url('blog.php')) ?>">Journal &amp; guides</a></li>
           <li><a href="<?= e(url('help.php')) ?>">Help centre</a></li>
-          <li><a href="<?= e(url('admin.php')) ?>">Platform admin</a></li>
           <li><a href="<?= e(url('future.php')) ?>">Roadmap</a></li>
         </ul>
       </div>
@@ -510,8 +693,8 @@ final class View
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 21l1.6-5A8.5 8.5 0 1 1 21 12z"/></svg>
 </button>
 
-<script src="<?= e(asset('assets/js/chat.js')) ?>" defer></script>
-<script src="<?= e(asset('assets/js/site.js')) ?>" defer></script>
+<script src="<?= e(is_file(JL_ROOT . '/assets/js/chat.min.js') ? asset('assets/js/chat.min.js') : asset('assets/js/chat.js')) ?>" defer></script>
+<script src="<?= e(is_file(JL_ROOT . '/assets/js/site.min.js') ? asset('assets/js/site.min.js') : asset('assets/js/site.js')) ?>" defer></script>
 </body>
 </html>
 <?php

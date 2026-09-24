@@ -476,7 +476,7 @@ function stayCard(p) {
   return `
   <article class="stay-card reveal in">
     <div class="stay-media" data-goto="/stay/${p.id}">
-      <img src="${img(p.img)}" alt="${esc(p.name)}" loading="lazy">
+      <img src="${img(p.img)}" alt="${esc(p.name)} — ${esc(p.area)}, ${esc(p.city)}" loading="lazy" width="800" height="600">
       <span class="ribbon ${p.badgeGold?"gold":""}">${p.badgeGold?I.gold:I.shield}${esc(p.badge)}</span>
       <button class="heart-btn ${fav?"active":""}" data-heart="${p.id}" aria-label="Save to wishlist">${fav?I.heartFill:I.heart}</button>
     </div>
@@ -990,7 +990,7 @@ function pStay(id) {
         ${p.soldOut?'<span class="tag" style="background:rgba(180,68,58,.8);color:#fff">'+I.clock+' Waitlist open for holidays</span>':""}
       </div>
       <div class="sd-thumbs" id="sdThumbs">
-        ${galleryKeys(p).map((k,i)=>`<button class="${i===0?"on":""}" data-sd="${i}"><img src="${img(k)}" alt=""></button>`).join("")}
+        ${galleryKeys(p).map((k,i)=>`<button class="${i===0?"on":""}" data-sd="${i}" aria-label="Photo ${i+1}"><img src="${img(k)}" alt="" width="96" height="72"></button>`).join("")}
         <button data-sd="360" onclick="openVirtualTour('${p.id}')" style="opacity:.9"><span style="display:grid;place-items:center;height:100%;color:#fff;background:rgba(0,0,0,.35);font-size:11px;letter-spacing:.08em">360°</span></button>
       </div>
     </div>
@@ -1523,7 +1523,7 @@ function bkReview(){
     <div class="grid-2" style="grid-template-columns:1.1fr .9fr">
       <div class="stack">
         <div class="panel" style="display:flex;gap:14px;align-items:center">
-          <img src="${img(p.img)}" style="width:120px;height:88px;object-fit:cover;border-radius:12px" alt="">
+          <img src="${img(p.img)}" style="width:120px;height:88px;object-fit:cover;border-radius:12px" alt="${esc(p.name)} — ${esc(p.area)}, ${esc(p.city)}" width="120" height="88">
           <div><b style="font-family:var(--fs-serif);font-size:20px">${esc(p.name)}</b>
           <div class="small">${esc(p.area)}, ${esc(p.city)} · ${p.beds} bd · ${p.baths} ba · ${BOOK_STATE.guests} guests</div>
           <div class="small">${BOOK_STATE.in} → ${BOOK_STATE.out} · ${nightsBetween(BOOK_STATE.in,BOOK_STATE.out)||3} nights</div></div>
@@ -1669,7 +1669,7 @@ function pConfirm(ref){
 
     <div class="panel" style="padding:26px">
       <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line-soft)">
-        <img src="${img(b.img)}" style="width:130px;height:92px;object-fit:cover;border-radius:12px" alt="">
+        <img src="${img(b.img)}" style="width:130px;height:92px;object-fit:cover;border-radius:12px" alt="${esc(b.name || 'Reservation')} thumbnail" width="130" height="92">
         <div style="flex:1;min-width:200px"><div class="small">${b.city} · ${esc(b.area)}</div>
           <b style="font-family:var(--fs-serif);font-size:22px">${esc(b.name)}</b>
           <div class="small">${b.in} → ${b.out} · ${b.nights} nights · ${b.guests} guests</div></div>
@@ -1805,7 +1805,7 @@ function tripCard(b){
   const st={confirmed:["ok","Confirmed"],pending:["warn","Awaiting host"],active:["info","In progress"],completed:["ok","Completed"],cancelled:["bad","Cancelled"]}[b.status]||["info",b.status];
   return `<div class="panel" style="padding:0;overflow:hidden">
     <div style="display:flex;flex-wrap:wrap;gap:18px;padding:18px;align-items:center">
-      <img src="${img(b.img)}" style="width:150px;height:104px;object-fit:cover;border-radius:12px" alt="">
+      <img src="${img(b.img)}" style="width:150px;height:104px;object-fit:cover;border-radius:12px" alt="${esc(b.name || 'Reservation')} thumbnail" width="150" height="104">
       <div style="flex:1;min-width:220px">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="pill-status ${st[0]}">${st[1]}</span><span class="small">${b.ref}</span></div>
         <b style="font-family:var(--fs-serif);font-size:21px;display:block;margin:6px 0 2px">${esc(b.name)}</b>
@@ -1985,7 +1985,7 @@ function pCompare(){
   <div class="page-body"><div class="wrap">
     ${items.length? `
     <div class="tbl-wrap"><table class="tbl" style="min-width:700px">
-      <thead><tr><th style="width:150px"></th>${items.map(p=>`<th><div style="border-radius:14px;overflow:hidden;aspect-ratio:4/3;margin-bottom:10px"><img src="${img(p.img)}" style="width:100%;height:100%;object-fit:cover" alt=""></div>
+      <thead><tr><th style="width:150px"></th>${items.map(p=>`<th><div style="border-radius:14px;overflow:hidden;aspect-ratio:4/3;margin-bottom:10px"><img src="${img(p.img)}" style="width:100%;height:100%;object-fit:cover" alt="${esc(p.name)}" loading="lazy"></div>
         <div style="font-family:var(--fs-serif);font-size:19px;cursor:pointer" data-goto="/stay/${p.id}">${esc(p.name)}</div>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="toggleCompare('${p.id}')">Remove</button></th>`).join("")}</tr></thead>
       <tbody>${rows.map(([l,f])=>`<tr><th>${l}</th>${items.map(p=>`<td>${f(p)}</td>`).join("")}</tr>`).join("")}</tbody>
@@ -2678,7 +2678,7 @@ function wizThumbs(ph){
     </div>`).join("");
 }
 function wizSampleThumbs(){
-  return ["p1","p12","p8","p4"].map(k=>`<div class="panel" style="padding:8px;position:relative"><img src="${img(k)}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" alt="">
+  return ["p1","p12","p8","p4"].map(k=>`<div class="panel" style="padding:8px;position:relative"><img src="${img(k)}" style="border-radius:10px;aspect-ratio:4/3;object-fit:cover;width:100%" alt="Sample Jollof Living residence" loading="lazy">
     <div class="small" style="margin-top:6px">${k==="p1"?"Living room":k==="p12"?"Garden":"Bathroom"} <span style="color:var(--ok)">✓ enhanced</span></div></div>`).join("");
 }
 function wizAddPhotos(input){
@@ -2768,7 +2768,7 @@ function wizReview(){
     <h2>Review &amp; submit</h2>
     <div class="sub">Our team verifies every new listing, then it goes live. Estimated time to first booking: <b>24–48 hours</b>.</div>
     <div class="panel" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-      ${(d.photos&&d.photos[0])?`<img src="${d.photos[0].url}" style="width:150px;height:110px;object-fit:cover;border-radius:12px" alt="">`:`<img src="${img('p1')}" style="width:150px;height:110px;object-fit:cover;border-radius:12px" alt="">`}
+      ${(d.photos&&d.photos[0])?`<img src="${d.photos[0].url}" style="width:150px;height:110px;object-fit:cover;border-radius:12px" alt="Guest photo attachment" loading="lazy">`:`<img src="${img('p1')}" style="width:150px;height:110px;object-fit:cover;border-radius:12px" alt="Jollof Living residence" loading="lazy">`}
       <div style="flex:1;min-width:220px"><b style="font-family:var(--fs-serif);font-size:21px">${esc(d.title||"The Emerald Court")}</b>
       <div class="small" style="margin-top:4px">${esc(d.area||"Ikoyi")} · ${d.guests||4} guests · ${d.beds||2} bd · rate ${fmt(d.rate||150000)}/night · ${(d.photos||[]).length||4} photo${(d.photos||[]).length===1?"":"s"}</div>
       <div class="btnrow" style="margin-top:8px"><span class="pill-status info">${I.clock} Awaiting verification</span><span class="pill-status gold">KYC complete</span></div></div>

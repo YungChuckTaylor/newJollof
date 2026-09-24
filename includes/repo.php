@@ -473,6 +473,7 @@ final class Repo
                 'img'     => $b['img'],
                 'excerpt' => $b['excerpt'],
                 'body'    => is_array($body) ? $body : array_filter(preg_split('~\n\s*\n~', (string) $b['body']) ?: []),
+                'created' => $b['created_at'],
             ];
         }, DB::all('SELECT * FROM blog_posts WHERE published = 1 ORDER BY sort_order, id')));
     }
@@ -587,8 +588,48 @@ final class Repo
                 return ['title' => $r['title'], 'desc' => (string) $r['description']];
             }
         }
-        return [
-            'title' => 'Jollof Living — Luxury Living, African Soul',
+        /* Keyword-first SEO defaults, used when a page has no row in
+           page_meta. Titles lead with the search query, not the brand. */
+        $defaults = [
+            'index'        => ['Luxury Short-Let Apartments in Lagos & Abuja | Jollof Living',
+                               'Book verified luxury apartments and penthouses in Lagos & Abuja — hotel-grade service, escrow payments, AI concierge and 24/7 support.'],
+            'stays'        => ['Luxury Stays & Short-Lets in Lagos & Abuja | Jollof Living',
+                               'Browse every verified Jollof Living residence across Lekki, Victoria Island, Ikoyi, Banana Island and Abuja — filters, map view and instant booking.'],
+            'collections'  => ['Curated Luxury Stay Collections | Jollof Living',
+                               'Waterfront escapes, sky penthouses, Abuja executive homes, heritage houses, romantic retreats and family villas — hand-picked by our team.'],
+            'neighborhoods'=> ['Lagos & Abuja Neighbourhood Guides | Jollof Living',
+                               'Insider guides to the best areas to stay in Lagos and Abuja — dining, nightlife, transport, safety and average nightly prices.'],
+            'experiences'  => ['Luxury Experiences in Lagos & Abuja | Jollof Living',
+                               'Boat cruises, private chefs, spa rituals, art tours, airport transfers and event hosting — add authentic experiences to any stay.'],
+            'blog'         => ['The Journal — Luxury Travel Guides for Nigeria | Jollof Living',
+                               'Travel guides, neighbourhood stories and design features from the Jollof Living editorial desk.'],
+            'host'         => ['List Your Home & Keep 88% | Jollof Living Hosts',
+                               'Earn more from your Lagos or Abuja property — photography, pricing intelligence, guest screening and payouts handled for you.'],
+            'membership'   => ['Jollof Club Membership — Points & Rewards | Jollof Living',
+                               'Earn Jollof Points on every stay, climb from Bronze to Platinum and redeem rewards, upgrades and gift cards.'],
+            'reviews'      => ['Verified Guest Reviews | Jollof Living',
+                               'Real, verified reviews from guests who stayed with Jollof Living — plus the platform rules that keep them honest.'],
+            'help'         => ['Help Centre & 24/7 Support | Jollof Living',
+                               'Booking help, dispute support, payment questions and emergency assistance — plus 24/7 live chat with our concierge desk.'],
+            'about'        => ['About Jollof Living — Luxury Living, African Soul',
+                               'The story, standards and safeguards behind Nigeria’s premium short-let platform.'],
+            'business'     => ['Corporate Stays for Business Teams | Jollof Living',
+                               'Corporate housing in Lagos & Abuja with centralised billing, PO support and travel policy enforcement for teams of any size.'],
+            'giftcards'    => ['Luxury Stay Gift Cards | Jollof Living',
+                               'Digital gift cards for luxury stays across Lagos & Abuja — delivered by email or WhatsApp and they never expire.'],
+            'referral'     => ['Refer a Friend — Give ₦10,000, Get ₦10,000 | Jollof Living',
+                               'The most generous referral programme in Nigerian travel — share your code and you both earn.'],
+            'app'          => ['The Jollof Living App — Keyless Check-In | Jollof Living',
+                               'Keyless check-in, live messaging, wallet passes and voice booking — the luxury stay platform in your pocket.'],
+            'concierge'    => ['AI Concierge — Plan Your Stay in Seconds | Jollof Living',
+                               'Ask about stays, prices, itineraries, transfers and private chefs — AI concierge, 24/7.'],
+            'map'          => ['Explore Every Residence on the Map | Jollof Living',
+                               'An interactive map of every Jollof Living residence in Lagos & Abuja with live nightly rates and availability.'],
+            'future'       => ['Product Roadmap | Jollof Living',
+                               'What’s shipping, what’s building and what’s dreaming on the Jollof Living platform.'],
+        ];
+        return $defaults[$key] ?? [
+            'title' => 'Luxury Short-Let Apartments in Lagos & Abuja | Jollof Living',
             'desc'  => 'Premium luxury apartments in Lagos & Abuja — exclusive short-term and long-term stays with concierge, escrow payments and AI.',
         ];
     }

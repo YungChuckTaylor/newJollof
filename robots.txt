@@ -1,5 +1,11 @@
+# Jollof Living — robots.txt
+# Sitemaps (absolute URLs required):
+Sitemap: https://www.jollofliving.com/sitemap.xml
+
 User-agent: *
 Allow: /
+
+# ---- private / back-office surfaces -------------------------------------
 Disallow: /admin.php
 Disallow: /admin-login.php
 Disallow: /api/
@@ -11,5 +17,21 @@ Disallow: /notifications.php
 Disallow: /payments.php
 Disallow: /confirm.php
 Disallow: /host-dashboard.php
+Disallow: /host-onboarding.php
+Disallow: /agent.php
+Disallow: /reset.php
+Disallow: /verify-email.php
+Disallow: /logout.php
+Disallow: /auth.php?mode=
 
-Sitemap: https://www.jollofliving.com/sitemap.xml
+# ---- Jollof Automations back office --------------------------------------
+# The subsite is canonically served under /automations/ (see .htaccess);
+# block the internal leads desk there and under the legacy path.
+Disallow: /automations/leads.php
+Disallow: /jollof-automations/
+
+# ---- housekeeping: never expose repo/dump artifacts ----------------------
+Disallow: /docs/
+Disallow: /*.sql$
+Disallow: /*.zip$
+Disallow: /*.log$

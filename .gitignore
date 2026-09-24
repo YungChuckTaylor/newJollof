@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# local config & runtime artifacts (never commit)
+includes/config.php
+storage/
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db

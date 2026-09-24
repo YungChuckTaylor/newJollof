@@ -8,6 +8,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Smart Home Solutions & Engineering Pillars · Jollof Automations';
+$pageDesc  = 'Architectural smart home solutions for luxury Nigerian residences: biometric access, circadian lighting, inverter climate AI, microgrid sync and edge security.';
+$noindex   = false;
 $activeNav = 'solutions';
 
 $services = AutoRepo::getServices();

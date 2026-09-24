@@ -45,7 +45,6 @@ declare(strict_types=1);
             <li><a href="case-studies.php">Client Case Studies &amp; ROI</a></li>
             <li><a href="process.php">5-Phase Engineering Standards</a></li>
             <li><a href="book-survey.php">Book Executive Site Survey</a></li>
-            <li><a href="leads.php">Internal Leads Dashboard</a></li>
           </ul>
         </div>
 

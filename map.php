@@ -7,5 +7,17 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('map');
+$links = [];
+foreach (Repo::neighborhoods(true) as $n) {
+    $links[(string) $n['name']] = url('neighborhood.php?n=' . rawurlencode((string) $n['id']));
+}
+$ssr = SSR::hero(
+        'The map',
+        'Explore every residence on the map',
+        'Every Jollof Living home in Lagos & Abuja with live nightly rates — or jump straight to a neighbourhood guide.',
+        url('stays.php'),
+        'Open the interactive map'
+    )
+    . SSR::linkList($links, 12);
+View::header('map', ['ssr' => $ssr]);
 View::footer();

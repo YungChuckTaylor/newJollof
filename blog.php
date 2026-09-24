@@ -7,5 +7,20 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('blog');
+$img = static fn(?string $key): string => View::imgUrl($key);
+$cards = array_map(static fn(array $b) => [
+    'href'  => url('blog-post.php?s=' . rawurlencode((string) $b['slug'])),
+    'img'   => $img((string) $b['img']),
+    'alt'   => $b['title'] . ' — from the Jollof Living Journal',
+    'title' => (string) $b['title'],
+    'meta'  => e(trim(((string) ($b['cat'] ?? '') !== '' ? (string) $b['cat'] . ' · ' : '')
+        . (string) ($b['date'] ?? '') . (($b['read'] ?? '') !== '' ? ' · ' . (string) $b['read'] : ''), ' ·')),
+], Repo::blogPosts());
+$ssr = SSR::hero(
+        'The Journal',
+        'Travel guides & stories from the Journal',
+        'Neighbourhood guides, culture pieces and design stories from the Jollof Living editorial desk.'
+    )
+    . SSR::linkCards($cards, 12);
+View::header('blog', ['ssr' => $ssr]);
 View::footer();

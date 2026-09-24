@@ -8,6 +8,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Jollof Automations · Turn Your Home Into an Intelligent Smart Home';
+$pageDesc  = 'Luxury smart home automation in Lagos — biometric access, circadian lighting, smart inverter climate and microgrid sync, engineered by Jollof Living\'s automation subsidiary.';
+$noindex   = false;
 $activeNav = 'home';
 
 // Fetch dynamic data from MySQL database (with graceful schema defaults)

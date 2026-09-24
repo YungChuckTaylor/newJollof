@@ -7,5 +7,19 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('experiences');
+$img = static fn(?string $key): string => View::imgUrl($key);
+$cards = array_map(static fn(array $x) => [
+    'href'  => url('experiences.php#' . rawurlencode((string) $x['id'])),
+    'img'   => $img((string) $x['img']),
+    'alt'   => $x['name'] . ' — luxury experience in Nigeria',
+    'title' => (string) $x['name'],
+    'meta'  => e(money((int) $x['price'])) . ($x['dur'] !== null && $x['dur'] !== '' ? ' · ' . e((string) $x['dur']) : ''),
+], Repo::experiences());
+$ssr = SSR::hero(
+        'Experiences',
+        'Experiences worth travelling for',
+        'Boat cruises, private chefs, spa rituals, art tours, airport transfers and event hosting — added to any Jollof Living stay.'
+    )
+    . SSR::linkCards($cards, 12);
+View::header('experiences', ['ssr' => $ssr]);
 View::footer();

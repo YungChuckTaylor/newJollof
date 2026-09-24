@@ -7,5 +7,13 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('concierge');
+$ssr = SSR::hero(
+        'AI concierge',
+        'Plan a stay in seconds, 24/7',
+        'Ask about stays, prices, itineraries, transfers and private chefs — Jollof, your AI concierge, answers instantly.',
+        url('stays.php'),
+        'Browse stays'
+    )
+    . SSR::stayGrid(Repo::properties(true), 3);
+View::header('concierge', ['ssr' => $ssr]);
 View::footer();

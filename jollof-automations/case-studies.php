@@ -8,6 +8,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Case Studies & Residential Transformations · Jollof Automations';
+$pageDesc  = 'Real smart home transformations across Nigeria — penthouses, estates and short-let portfolios with measured energy savings and ROI.';
+$noindex   = false;
 $activeNav = 'cases';
 
 $caseStudies = AutoRepo::getCaseStudies();

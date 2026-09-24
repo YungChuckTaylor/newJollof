@@ -7,5 +7,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('giftcards');
+$ssr = SSR::hero(
+        'Gift cards',
+        'Give the gift of a Jollof stay',
+        'Digital gift cards delivered by email or WhatsApp — they never expire and redeem across every residence.'
+    )
+    . SSR::secHead('Redeemable on', 'Residences guests love')
+    . SSR::stayGrid(Repo::properties(true), 3);
+View::header('giftcards', ['ssr' => $ssr]);
 View::footer();

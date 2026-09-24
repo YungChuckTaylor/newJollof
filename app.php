@@ -7,5 +7,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('app');
+$ssr = SSR::hero(
+        'The app',
+        'Your stay, keyless',
+        'Keyless check-in, live messaging, wallet passes and voice booking — the full Jollof Living platform in your pocket.',
+        url('auth.php'),
+        'Create a free account'
+    );
+View::header('app', ['ssr' => $ssr]);
 View::footer();

@@ -8,6 +8,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Experience Lab · Interactive Smart Home Digital Twin · Jollof Automations';
+$pageDesc  = 'Step inside a live digital twin of a Jollof Automations smart home — toggle scenes, lighting temperatures and climate in the interactive Experience Lab.';
+$noindex   = false;
 $activeNav = 'lab';
 
 $scenes = AutoRepo::getSimulatorScenes();

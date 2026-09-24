@@ -7,5 +7,17 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('404');
+/* A hard 404 status: serving 200 here would be a soft-404 in Google's eyes. */
+http_response_code(404);
+
+$ssr = SSR::hero(
+        '404 — page not found',
+        'This page took a wrong turning',
+        'The address doesn’t exist — yet. The residences below definitely do.',
+        url('stays.php'),
+        'Browse residences'
+    )
+    . SSR::stayGrid(Repo::properties(true), 3);
+
+View::header('404', ['ssr' => $ssr]);
 View::footer();

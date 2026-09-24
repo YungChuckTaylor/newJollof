@@ -42,6 +42,18 @@ return [
         'url'       => 'https://www.jollofliving.com',
         'timezone'  => 'Africa/Lagos',
         'currency'  => 'NGN',
+
+        // ------------------------------------------------ SEO & analytics
+        // Google Analytics 4 measurement ID, e.g. 'G-XXXXXXXXXX'.
+        // Leave empty to load nothing at all.
+        'ga4_id'              => '',
+        // Google Tag Manager container ID, e.g. 'GTM-XXXXXXX' (wins over ga4_id).
+        'gtm_id'              => '',
+        // Search-console / verification tokens (content value only, no quotes).
+        // Google: copy the content="…" value from the HTML-file verification
+        // snippet. Bing: the msvalidate.01 content value.
+        'google_verification' => '',
+        'bing_verification'   => '',
     ],
 
     // ------------------------------------------------------------ email

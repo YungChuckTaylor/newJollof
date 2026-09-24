@@ -7,5 +7,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('business');
+$ssr = SSR::hero(
+        'Jollof for Business',
+        'Corporate stays your finance team will love',
+        'Centralised billing, PO support and travel policy enforcement for teams staying in Lagos & Abuja — from one night to one year.',
+        url('auth.php?mode=register'),
+        'Open a business account'
+    );
+View::header('business', ['ssr' => $ssr]);
 View::footer();

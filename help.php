@@ -7,5 +7,29 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('help');
+$links = [];
+foreach (Repo::helpCategories() as $c) {
+    $links[(string) $c['name']] = url('help.php#' . rawurlencode((string) $c['id']));
+}
+$faqChunk = array_slice(Repo::faqs(), 0, 14);
+$ssr = SSR::hero(
+        'Help centre',
+        'How can we help?',
+        'Answers about bookings, payments, disputes and stays — plus 24/7 live chat with our concierge desk.'
+    )
+    . SSR::linkList($links, 12)
+    . SSR::secHead('FAQ', 'Frequently asked questions')
+    . SSR::faqs(Repo::faqs(), 14);
+View::header('help', [
+    'ssr'    => $ssr,
+    'jsonld' => [[
+        '@context'   => 'https://schema.org',
+        '@type'      => 'FAQPage',
+        'mainEntity' => array_map(static fn(array $f) => [
+            '@type'          => 'Question',
+            'name'           => (string) $f[0],
+            'acceptedAnswer' => ['@type' => 'Answer', 'text' => (string) $f[1]],
+        ], $faqChunk),
+    ]],
+]);
 View::footer();

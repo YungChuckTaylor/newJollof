@@ -7,5 +7,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('referral');
+$ssr = SSR::hero(
+        'Refer & earn',
+        'Give ₦10,000, get ₦10,000',
+        'The most generous referral in Nigerian travel — share your code and, when a friend completes their first stay, you both earn.',
+        url('auth.php'),
+        'Get your code'
+    );
+View::header('referral', ['ssr' => $ssr]);
 View::footer();

@@ -7,5 +7,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('host');
+$ssr = SSR::hero(
+        'For hosts & owners',
+        'List your home and keep 88%',
+        'Photography, pricing intelligence, guest screening and escrow payouts — we handle the hard parts while you earn more.',
+        url('host-onboarding.php'),
+        'Start the listing wizard'
+    );
+View::header('host', ['ssr' => $ssr]);
 View::footer();

@@ -7,5 +7,17 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('future');
+$road = '';
+foreach (Repo::roadmap() as $r) {
+    $road .= '<div class="ssr-link-card"><span class="ssr-link-body"><strong>' . e((string) $r['title'])
+        . '</strong><span class="ssr-link-meta">' . e((string) $r['ph']) . ' · ' . e((string) $r['status']) . '</span></span>'
+        . '<p class="ssr-link-desc">' . e((string) $r['desc']) . '</p></div>';
+}
+$ssr = SSR::hero(
+        'Roadmap',
+        'What we’re building next',
+        'The live product roadmap — what’s shipping, what’s building, what’s dreaming.'
+    )
+    . '<div class="ssr-cards ssr-grid">' . $road . '</div>';
+View::header('future', ['ssr' => $ssr]);
 View::footer();

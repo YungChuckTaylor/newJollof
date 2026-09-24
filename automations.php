@@ -1,21 +1,13 @@
 <?php
 /**
- * Jollof Automations — Root Entrypoint
- * A Subsidiary of Jollof Living.
+ * Jollof Automations — legacy root entry point.
+ * The subsidiary site is canonically served under /automations/
+ * (see .htaccess); this stub keeps the old URL working with a
+ * permanent redirect so search engines consolidate the two.
  */
 declare(strict_types=1);
+require __DIR__ . '/includes/bootstrap.php';
 
-$phpIndex = __DIR__ . '/jollof-automations/index.php';
-if (file_exists($phpIndex)) {
-    require $phpIndex;
-    exit;
-}
-
-$htmlFile = __DIR__ . '/jollof-automations/index.html';
-if (file_exists($htmlFile)) {
-    readfile($htmlFile);
-    exit;
-}
-
-header('Location: /');
-exit;
+/* redirect() resolves through base_path(), so this 301 works both from the
+   document root and from a sub-folder install. */
+redirect('automations/', 301);

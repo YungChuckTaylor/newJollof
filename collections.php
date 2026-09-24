@@ -7,5 +7,19 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('collections');
+$img = static fn(?string $key): string => View::imgUrl($key);
+$cards = array_map(static fn(array $c) => [
+    'href'  => url('stays.php?collection=' . rawurlencode((string) $c['id'])),
+    'img'   => $img((string) $c['img']),
+    'alt'   => $c['name'] . ' — curated collection of luxury stays',
+    'title' => (string) $c['name'],
+    'meta'  => e((string) ($c['sub'] ?? '')),
+], Repo::collections());
+$ssr = SSR::hero(
+        'Curated collections',
+        'Hand-picked luxury stay collections',
+        'Waterfront escapes, sky penthouses, heritage homes, romantic retreats, family villas and the Abuja executive set.'
+    )
+    . SSR::linkCards($cards, 12);
+View::header('collections', ['ssr' => $ssr]);
 View::footer();

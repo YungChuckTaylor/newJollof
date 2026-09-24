@@ -7,5 +7,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('about');
+$ssr = SSR::hero(
+        'About us',
+        'Luxury living, African soul',
+        'The story, standards and safeguards behind Nigeria’s premium short-let platform — every home inspected, every payment escrow-protected.',
+        url('stays.php'),
+        'Browse residences'
+    );
+View::header('about', ['ssr' => $ssr]);
 View::footer();

@@ -7,5 +7,17 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('reviews');
+$latest = Repo::latestReviews(9);
+$quotes = array_map(static fn(array $r) => [
+    (string) $r['author'],
+    trim((string) ($r['property_name'] ?? '') . (($r['meta'] ?? '') !== '' ? ' · ' . (string) $r['meta'] : '')),
+    (string) $r['body'],
+], $latest);
+$ssr = SSR::hero(
+        'Guest reviews',
+        'Verified reviews from real guests',
+        'Every review comes from a completed, verified booking — no edits, no incentives, no exceptions.'
+    )
+    . SSR::testimonials($quotes, 9);
+View::header('reviews', ['ssr' => $ssr]);
 View::footer();

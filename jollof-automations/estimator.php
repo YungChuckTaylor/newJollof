@@ -8,6 +8,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $pageTitle = 'Smart Home Cost Estimator & ROI Calculator · Jollof Automations';
+$pageDesc  = 'Estimate the cost of automating your Lagos or Abuja residence — room-by-room budgets, inverter failover sizing and payback period in minutes.';
+$noindex   = false;
 $activeNav = 'estimator';
 
 $services   = AutoRepo::getServices();

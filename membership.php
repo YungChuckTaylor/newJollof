@@ -7,5 +7,22 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require JL_INC . '/view.php';
 
-View::header('membership');
+$tiersHtml = '<div class="ssr-cards ssr-grid">';
+foreach (Repo::tiers() as $t) {
+    $tiersHtml .= '<div class="ssr-link-card"><span class="ssr-link-body"><strong>' . e((string) $t['name'])
+        . ' (' . e((string) $t['letter']) . ')</strong><span class="ssr-link-meta">' . e((string) $t['req'])
+        . ' · ' . e((string) $t['pts']) . ' · ' . e((string) $t['mult']) . ' points</span></span>'
+        . (count($t['perks']) > 0
+            ? '<ul class="ssr-links"><li>' . implode('</li><li>', array_map(static fn($p) => e((string) $p), array_slice($t['perks'], 0, 4))) . '</li></ul>'
+            : '')
+        . '</div>';
+}
+$tiersHtml .= '</div>';
+$ssr = SSR::hero(
+        'Jollof Club',
+        'Earn points on every stay',
+        'From Bronze to Platinum — every booking earns Jollof Points you redeem for upgrades, rewards and gift cards.'
+    )
+    . $tiersHtml;
+View::header('membership', ['ssr' => $ssr]);
 View::footer();

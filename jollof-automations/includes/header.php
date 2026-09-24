@@ -1,10 +1,69 @@
 <?php
 /**
  * Jollof Automations — Site Header Template
+ *
+ * SEO notes:
+ *  - canonical URLs live under /automations/ (see root .htaccess rewrite)
+ *  - $pageTitle / $pageDesc / $ogImage may be set per page before including
+ *  - structured data: HomeAndConstructionBusiness + WebSite (JSON-LD)
  */
 declare(strict_types=1);
 $pageTitle = $pageTitle ?? 'Turn Your Residence Into an Intelligent Smart Home · Jollof Automations';
+$pageDesc  = $pageDesc  ?? 'A subsidiary of Jollof Living. We convert architectural residences, penthouses and luxury homes into intelligent smart homes with biometric access, autonomous climate, and circadian lighting.';
 $activeNav = $activeNav ?? 'home';
+$noindex   = $noindex   ?? false;
+
+if (strlen($pageDesc) > 158) {
+    $pageDesc = rtrim(substr($pageDesc, 0, 155)) . '…';
+}
+
+/* ---- canonical base: inherit the parent site URL when configured ------- */
+$jaConfig     = function_exists('ja_config') ? (array) ja_config() : [];
+$jaParentConf = $jaConfig;
+if (defined('JL_ROOT') && is_file(JL_ROOT . '/includes/config.php')) {
+    try {
+        $jaParentConf = array_merge($jaConfig, (array) require JL_ROOT . '/includes/config.php');
+    } catch (\Throwable $e) {
+        /* fall through with the local config */
+    }
+}
+$jaSiteUrl = trim((string) ($jaParentConf['site']['url'] ?? ''));
+if ($jaSiteUrl === '') {
+    $jaScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $jaSiteUrl = $jaScheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'www.jollofliving.com');
+}
+$jaSiteUrl  = rtrim($jaSiteUrl, '/');
+$jaScript   = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
+$jaSelfPath = '/automations/' . ($jaScript === 'index.php' ? '' : $jaScript);
+$jaCanonical = $jaSiteUrl . $jaSelfPath;
+
+$jaPageName = trim(explode('·', $pageTitle)[0]);
+$jaEmail    = (string) ($jaConfig['site']['email'] ?? 'automations@jollofliving.com');
+$jaPhone    = (string) ($jaConfig['site']['phone'] ?? '+234 1 888 5655');
+
+$jaJsonLd = [
+    '@context'    => 'https://schema.org',
+    '@type'       => 'HomeAndConstructionBusiness',
+    '@id'         => $jaSiteUrl . '/automations/#business',
+    'name'        => 'Jollof Automations',
+    'description' => $pageDesc,
+    'url'         => $jaCanonical,
+    'email'       => $jaEmail,
+    'telephone'   => $jaPhone,
+    'image'       => $jaSiteUrl . '/automations/assets/img/automations-logo-light.png',
+    'areaServed'  => ['@type' => 'Country', 'name' => 'Nigeria'],
+    'address'     => [
+        '@type'           => 'PostalAddress',
+        'addressLocality' => 'Victoria Island',
+        'addressRegion'   => 'Lagos',
+        'addressCountry'  => 'NG',
+    ],
+    'parentOrganization' => [
+        '@type' => 'Organization',
+        'name'  => 'Jollof Living',
+        'url'   => $jaSiteUrl . '/',
+    ],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -12,13 +71,33 @@ $activeNav = $activeNav ?? 'home';
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= ja_e($pageTitle) ?></title>
-  <meta name="description" content="A subsidiary of Jollof Living. We convert architectural residences, penthouses and luxury homes into intelligent smart homes with biometric access, autonomous climate, and circadian lighting.">
+  <meta name="description" content="<?= ja_e($pageDesc) ?>">
+  <link rel="canonical" href="<?= ja_e($jaCanonical) ?>">
+<?php if ($noindex): ?>
+  <meta name="robots" content="noindex, nofollow">
+<?php endif; ?>
+  <meta property="og:site_name" content="Jollof Automations">
+  <meta property="og:locale" content="en_NG">
+  <meta property="og:title" content="<?= ja_e($pageTitle) ?>">
+  <meta property="og:description" content="<?= ja_e($pageDesc) ?>">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="<?= ja_e($jaCanonical) ?>">
+  <meta property="og:image" content="<?= ja_e($jaSiteUrl . '/automations/assets/img/automations-logo-light.png') ?>">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<?= ja_e($pageTitle) ?>">
+  <meta name="twitter:description" content="<?= ja_e($pageDesc) ?>">
+  <meta name="twitter:image" content="<?= ja_e($jaSiteUrl . '/automations/assets/img/automations-logo-light.png') ?>">
+  <script type="application/ld+json"><?= json_encode($jaJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <!-- Cormorant Garamond is self-hosted (shared with the main site); Jakarta +
+       Space Grotesk load from Google with preconnect + display=swap -->
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/cg-normal.woff2" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
+    @font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:400 700;font-display:swap;
+      src:url('assets/fonts/cg-normal.woff2') format('woff2')}
     .brand-logo-img {
       height: 44px;
       width: auto;
@@ -31,6 +110,7 @@ $activeNav = $activeNav ?? 'home';
       }
     }
   </style>
+  <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
 
