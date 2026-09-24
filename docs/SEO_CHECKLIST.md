@@ -216,6 +216,44 @@ and extract it over the site folder (tick "overwrite existing files"):
 https://github.com/YungChuckTaylor/newJollof/archive/refs/heads/arena/01a0d3cf-newjollof.zip
 ```
 
+### Plan C — when ZIP extraction half-succeeds
+
+Symptom: *some* new files are live (e.g. the fatal handler page renders) but
+others 404 (`health.php`). That is a **partial extraction** — usually a full
+**disk / inode quota** (check the left sidebar in cPanel) or an interrupted
+unzip. Fix: delete the uploaded ZIP *and* the extracted folder from the
+server, free quota if needed, re-upload, re-extract, and verify the file
+count matches.
+
+**No-upload fallback:** any file can be created without uploading —
+cPanel File Manager → **+File** → name it → right-click → **Edit** → paste
+the contents → Save. Raw contents for the critical files live at:
+
+```
+https://raw.githubusercontent.com/YungChuckTaylor/newJollof/arena/01a0d3cf-newjollof/health.php
+https://raw.githubusercontent.com/YungChuckTaylor/newJollof/arena/01a0d3cf-newjollof/includes/ssr.php
+https://raw.githubusercontent.com/YungChuckTaylor/newJollof/arena/01a0d3cf-newjollof/includes/view.php
+https://raw.githubusercontent.com/YungChuckTaylor/newJollof/arena/01a0d3cf-newjollof/includes/bootstrap.php
+https://raw.githubusercontent.com/YungChuckTaylor/newJollof/arena/01a0d3cf-newjollof/sitemap.php
+https://raw.githubusercontent.com/YungChuckTaylor/newJollof/arena/01a0d3cf-newjollof/.htaccess
+```
+
+**Paste-able file checker** (create as `checkfiles.php`, open in browser,
+delete afterwards) — prints exactly which files are missing:
+
+```php
+<?php
+header('Content-Type: text/plain');
+$files = ['index.php','health.php','sitemap.php','.htaccess',
+  'includes/bootstrap.php','includes/config.php','includes/ssr.php',
+  'includes/view.php','includes/repo.php','includes/db.php',
+  'install/schema/2026_09_24_seo_metadata.sql'];
+foreach ($files as $f) {
+  echo (is_file(__DIR__.'/'.$f) ? 'FOUND  ' : 'MISSING ') . $f . PHP_EOL;
+}
+echo 'PHP ' . PHP_VERSION . PHP_EOL;
+```
+
 **Fastest diagnosis path:**
 
 1. Upload **`health.php`** (in the repo root) next to `index.php` and open
