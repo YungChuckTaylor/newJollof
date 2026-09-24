@@ -26,14 +26,6 @@ $add = static function (string $loc, ?string $lastmod, string $pri, array $image
     ];
 };
 
-$dbTime = static function (string $sql, array $params = []): ?string {
-    try {
-        $v = DB::value($sql, $params);
-        return $v !== null && $v !== '' ? strtotime((string) $v) ?: null : null;
-    } catch (Throwable) {
-        return null;
-    }
-};
 $fileTime = static function (string $rel): ?int {
     $f = JL_ROOT . '/' . $rel;
     return is_file($f) ? (int) filemtime($f) : null;
@@ -58,7 +50,7 @@ foreach (['stays', 'collections', 'neighborhoods', 'experiences', 'membership', 
 $props = [];
 try {
     $props = DB::all("SELECT slug, img, name, updated_at FROM properties WHERE status = 'live'");
-} catch (Throwable) {
+} catch (Throwable $e) {
 }
 foreach ($props as $p) {
     $add('/stay/' . rawurlencode((string) $p['slug']), strtotime((string) $p['updated_at']) ?: null, '0.9', [
@@ -70,7 +62,7 @@ try {
     foreach (Repo::neighborhoods(false) as $n) {
         $add('/neighborhood/' . rawurlencode((string) $n['id']), null, '0.7');
     }
-} catch (Throwable) {
+} catch (Throwable $e) {
 }
 
 try {
@@ -79,7 +71,7 @@ try {
             $imgEntry((string) $b['img'], (string) $b['title']),
         ]);
     }
-} catch (Throwable) {
+} catch (Throwable $e) {
 }
 
 /* --------------------------------------------- Jollof Automations subsite */

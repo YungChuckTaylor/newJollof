@@ -36,14 +36,16 @@ final class SSR
     /** Reusable inline SVG icon (kept public for the page templates). */
     public static function icon(string $name): string
     {
-        return match ($name) {
-            'star'  => self::I_STAR,
-            'pin'   => self::I_PIN,
-            'bed'   => self::I_BED,
-            'bath'  => self::I_BATH,
-            'users' => self::I_USERS,
-            default => '',
-        };
+        /* NB: deliberately a switch(), not match() — some shared hosts still
+           run PHP 7.4 and a parse error here would 500 every page. */
+        switch ($name) {
+            case 'star':  return self::I_STAR;
+            case 'pin':   return self::I_PIN;
+            case 'bed':   return self::I_BED;
+            case 'bath':  return self::I_BATH;
+            case 'users': return self::I_USERS;
+            default:      return '';
+        }
     }
 
     /** Breadcrumb trail: [['Home', '/'], ['Stays', '/stays.php'], ['Onyx', null]] */

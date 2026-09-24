@@ -1,31 +1,32 @@
 # ============================================================================
-# Jollof Living — Apache configuration (cPanel / shared hosting friendly)
+# Jollof Living — Apache configuration (HostGator / cPanel shared hosting)
 #
-# Upload this file INTO THE SAME FOLDER as index.php — either the document
-# root (public_html/.htaccess) or a sub-folder (public_html/jollof/.htaccess).
-# The rewrites are written relative to this file's own directory, so they work
-# in both locations. If the site lives in a sub-folder, update the two
-# absolute paths flagged with "SUB-FOLDER NOTE" below.
+# Upload this file INTO THE SAME FOLDER as index.php — i.e. for the current
+# staging install:  public_html/jollof/.htaccess
 #
 #   1. Pretty, canonical URLs (incl. the /automations/ subsidiary site)
 #   2. 301 consolidation of legacy / duplicate entry points
 #   3. Compression + long-lived caching (Core Web Vitals)
 #   4. Hardening for files that must never be public
+#
+# Written for maximum compatibility: every directive that shared hosts
+# sometimes reject is wrapped in <IfModule> or dual 2.2/2.4 syntax, so this
+# file cannot take the site down with a 500.
 # ============================================================================
 
-Options -Indexes
+# NB: deliberately NO "Options -Indexes" here — if the host's AllowOverride
+# excludes Options, that single line would 500 the whole site.
+
 DirectoryIndex index.php index.html
 
 # ----------------------------------------------------------------------------
-# 1) REWRITES
+# 1) REWRITES (mod_rewrite is enabled on every cPanel host)
 # ----------------------------------------------------------------------------
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
 # --- Optional: force the canonical host + https. Uncomment once
-#     https://www.jollofliving.com resolves with a valid certificate, so a
-#     single host appears in every index. The staging domain keeps working
-#     while the rules are commented out (canonical tags keep URLs consolidated).
+#     https://www.jollofliving.com resolves with a valid certificate.
 # RewriteCond %{HTTPS} off [OR]
 # RewriteCond %{HTTP_HOST} !^www\. [NC]
 # RewriteRule ^ https://www.jollofliving.com%{REQUEST_URI} [R=301,L]
@@ -61,9 +62,9 @@ RewriteRule ^sitemap\.xml$ sitemap.php [L]
 # ----------------------------------------------------------------------------
 # 2) ERROR PAGES
 # ----------------------------------------------------------------------------
-# SUB-FOLDER NOTE: if the site lives at e.g. /jollof/, change this to
-# ErrorDocument 404 /jollof/404.php
-ErrorDocument 404 /404.php
+# The install currently lives in the SUB-FOLDER /jollof/ — keep the prefix.
+# If you later move the site to the document root, change this to /404.php.
+ErrorDocument 404 /jollof/404.php
 
 # ----------------------------------------------------------------------------
 # 3) COMPRESSION — text assets over the wire
@@ -72,7 +73,7 @@ ErrorDocument 404 /404.php
   AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
   AddOutputFilterByType DEFLATE application/javascript application/x-javascript
   AddOutputFilterByType DEFLATE application/json application/xml application/rss+xml
-  AddOutputFilterByType DEFLATE image/svg+xml application/vnd.ms-fontobject application/x-font-ttf font/woff2
+  AddOutputFilterByType DEFLATE image/svg+xml
 </IfModule>
 
 # ----------------------------------------------------------------------------
@@ -100,13 +101,26 @@ ErrorDocument 404 /404.php
 </IfModule>
 
 # ----------------------------------------------------------------------------
-# 5) HARDENING — never serve repo artifacts, dumps or dotfiles
+# 5) HARDENING — never serve repo artifacts, dumps or dotfiles.
+#    Dual syntax: Apache 2.4 (Require) with 2.2 fallback (Order/Deny).
 # ----------------------------------------------------------------------------
 <FilesMatch "(?i)\.(sql|zip|log|ini|sh|bak|dist|lock)$">
-  Require all denied
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
 </FilesMatch>
 <FilesMatch "^\.">
-  Require all denied
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
 </FilesMatch>
 <IfModule mod_rewrite.c>
   RewriteRule ^\.git - [F]
