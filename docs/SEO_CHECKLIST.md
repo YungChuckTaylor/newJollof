@@ -180,7 +180,48 @@ Snippet output is completely skipped while the keys are empty.
 
 ---
 
-## 4. Security note (spotted while auditing)
+---
+
+## 4. Troubleshooting a blank HTTP 500 after upload (read this first!)
+
+The cPanel **Metrics → Errors** page only shows *Apache* errors. PHP fatal
+errors are logged by the app itself to **`public_html/storage/logs/php-error.log`**.
+
+**Fastest diagnosis path:**
+
+1. Upload **`health.php`** (in the repo root) next to `index.php` and open
+   `https://<host>/jollof/health.php`. It is standalone (loads nothing from
+   the app) and checks PHP version, extensions, every required file
+   (catches partial uploads), storage writability, and the DB connection —
+   including the classic cPanel gotcha of missing the account-name prefix.
+2. Set `'debug' => true` in `includes/config.php`, reload the homepage, and
+   the real error prints on screen. Set it back to `false` afterwards.
+3. New fatal-error handler (added to `includes/bootstrap.php`): any hard
+   fatal now renders a friendly page pointing at the log instead of a blank 500.
+
+**The two causes this deployment actually had:**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Blank 500, empty Apache log | Partial upload — e.g. new pages calling `SSR::` while `includes/ssr.php` was never uploaded (or an old `view.php` mixed with new pages) | Re-upload the **whole** folder; `health.php` lists any missing file by name |
+| 503 "Database connection failed" | cPanel prefixes DB name/user with the account name (`wal7zkit4bnv_…`) — config shipped unprefixed values | cPanel → MySQL® Databases: create DB + user, import `wal7zkit_jollof.sql` via phpMyAdmin, then put the exact prefixed values in `includes/config.php` |
+
+Upload checklist of files NEW in the SEO update (all must exist on the server):
+
+```
+.htaccess                                  → public_html/jollof/
+health.php                                 → public_html/jollof/  (delete after use)
+includes/ssr.php                           → public_html/jollof/includes/
+install/schema/2026_09_24_seo_metadata.sql → public_html/jollof/install/schema/
+sitemap.php  (replaced)                    → public_html/jollof/
+assets/img/*.webp   (17 new files)         → public_html/jollof/assets/img/
+assets/js/site.min.js, assets/js/chat.min.js, assets/css/site.min.css
+tools/build-assets.mjs, package.json, docs/SEO_CHECKLIST.md
+```
+
+---
+
+## 5. Security note (spotted while auditing)
 
 `includes/config.php` and `jollof-automations/config.php` are **tracked in
 git and contain live database credentials** (`Chinwike@100`, admin keys). The
