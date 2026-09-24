@@ -187,6 +187,35 @@ Snippet output is completely skipped while the keys are empty.
 The cPanel **Metrics → Errors** page only shows *Apache* errors. PHP fatal
 errors are logged by the app itself to **`public_html/storage/logs/php-error.log`**.
 
+### Where is my site root? (HostGator temporary domains)
+
+A 404 for `/jollof/health.php` means the file is not in the folder that
+serves this URL. On this account, subdomains live in different places:
+
+- `File Manager → public_html → jollof/` — if this folder exists, then
+  `/jollof/…` URLs are served from `public_html/jollof/`.
+- Some subdomains get their OWN folder instead, e.g.
+  `/home2/wal7zkit4bnv/kxq.lop.temporary.site/` (the error log shows this
+  pattern for other sites on the account).
+
+**10-second probe:** in cPanel File Manager, create `probe.php` inside the
+folder you believe serves the site, containing exactly:
+
+```php
+<?php echo __DIR__;
+```
+
+then open the matching URL (e.g. `…/jollof/probe.php`). If you get a 404 →
+wrong folder. If it prints a path → THAT is the folder serving your URL;
+upload all site files there. Delete the probe afterwards.
+
+**Getting the latest files:** download the whole updated branch in one click
+and extract it over the site folder (tick "overwrite existing files"):
+
+```
+https://github.com/YungChuckTaylor/newJollof/archive/refs/heads/arena/01a0d3cf-newjollof.zip
+```
+
 **Fastest diagnosis path:**
 
 1. Upload **`health.php`** (in the repo root) next to `index.php` and open
