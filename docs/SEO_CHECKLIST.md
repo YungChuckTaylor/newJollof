@@ -254,6 +254,20 @@ foreach ($files as $f) {
 echo 'PHP ' . PHP_VERSION . PHP_EOL;
 ```
 
+### Plan D — repair.php: let the server fix itself (no uploads at all)
+
+If pasting files manually keeps not taking, use `repair.php` (repo root):
+
+1. Create one file in File Manager: `repair.php` inside `public_html/jollof/`
+   — paste its raw contents from
+   `https://raw.githubusercontent.com/YungChuckTaylor/newJollof/da5a0dd/repair.php`
+2. Open `https://<host>/jollof/repair.php?key=jl-fix-2026`
+3. It downloads all ~150 code files from GitHub (pinned commit), verifies
+   each with SHA-1, writes them, never touches your config.php, writes
+   health.php AND status.php (in case a WAF blocks the name "health"),
+   and clears opcache. Re-run once if any file shows FETCH-FAIL.
+4. Delete repair.php + health.php + status.php when done.
+
 **Fastest diagnosis path:**
 
 1. Upload **`health.php`** (in the repo root) next to `index.php` and open
