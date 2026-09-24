@@ -16,7 +16,154 @@ if (!defined('JL_ROOT')) {
 
 if (class_exists('View', false)) { return; }
 
-require_once __DIR__ . '/ssr.php';
+/* SSR builders. Defence in depth: if includes/ssr.php is missing or was
+   truncated by a half-finished upload, degrade to the inline shim below
+   instead of fataling every page with "Class SSR not found". */
+if (is_file(__DIR__ . '/ssr.php')) {
+    require_once __DIR__ . '/ssr.php';
+}
+
+if (!class_exists('SSR', false)) {
+
+/**
+ * Degraded SSR shim — only used when includes/ssr.php cannot be loaded.
+ * Renders simple, valid, crawlable HTML so the site stays up until the
+ * real file is restored.
+ */
+final class SSR
+{
+    public static function icon(string $name): string
+    {
+        return '';
+    }
+
+    public static function crumbs(array $items): string
+    {
+        $out = '<nav class="ssr-crumbs wrap">';
+        $last = count($items) - 1;
+        foreach (array_values($items) as $i => [$label, $href]) {
+            $out .= ($href !== null && $i !== $last)
+                ? '<a href="' . e((string) $href) . '">' . e((string) $label) . '</a>'
+                : '<span>' . e((string) $label) . '</span>';
+            if ($i !== $last) {
+                $out .= ' / ';
+            }
+        }
+        return $out . '</nav>';
+    }
+
+    public static function secHead(string $eyebrow, string $h2, string $lead = '', bool $center = false, string $h2Tag = 'h2'): string
+    {
+        $h = '<div class="sec-head">';
+        if ($eyebrow !== '') {
+            $h .= '<span class="eyebrow">' . e($eyebrow) . '</span>';
+        }
+        $h .= '<' . $h2Tag . '>' . e($h2) . '</' . $h2Tag . '>';
+        if ($lead !== '') {
+            $h .= '<p>' . e($lead) . '</p>';
+        }
+        return $h . '</div>';
+    }
+
+    public static function cta(string $href, string $label, string $ghostHref = '', string $ghostLabel = ''): string
+    {
+        $h = '<p><a class="btn btn-gold" href="' . e($href) . '">' . e($label) . '</a>';
+        if ($ghostHref !== '') {
+            $h .= ' <a class="btn btn-ghost" href="' . e($ghostHref) . '">' . e($ghostLabel) . '</a>';
+        }
+        return $h . '</p>';
+    }
+
+    public static function stayCard(array $p, bool $lazy = true): string
+    {
+        return '';
+    }
+
+    public static function stayGrid(array $props, int $limit = 6, bool $lazy = true): string
+    {
+        $lis = '';
+        $n = 0;
+        foreach ($props as $p) {
+            if ($n++ >= $limit) {
+                break;
+            }
+            $href = url('stay.php?p=' . rawurlencode((string) ($p['id'] ?? '')));
+            $lis .= '<li><a href="' . e($href) . '">' . e((string) ($p['name'] ?? 'Residence')) . '</a> — '
+                . e(money((int) ($p['price'] ?? 0))) . '/night</li>';
+        }
+        return $lis === '' ? '' : '<ul class="ssr-links">' . $lis . '</ul>';
+    }
+
+    public static function linkCards(array $items, int $limit = 8): string
+    {
+        $lis = '';
+        $n = 0;
+        foreach ($items as $it) {
+            if ($n++ >= $limit) {
+                break;
+            }
+            $lis .= '<li><a href="' . e((string) $it['href']) . '">' . e((string) $it['title']) . '</a></li>';
+        }
+        return $lis === '' ? '' : '<ul class="ssr-links">' . $lis . '</ul>';
+    }
+
+    public static function linkList(array $items, int $limit = 12): string
+    {
+        $lis = '';
+        $n = 0;
+        foreach ($items as $label => $href) {
+            if ($n++ >= $limit) {
+                break;
+            }
+            $lis .= '<li><a href="' . e((string) $href) . '">' . e((string) $label) . '</a></li>';
+        }
+        return $lis === '' ? '' : '<ul class="ssr-links">' . $lis . '</ul>';
+    }
+
+    public static function faqs(array $faqs, int $limit = 14): string
+    {
+        $h = '<dl>';
+        $n = 0;
+        foreach ($faqs as [$q, $a]) {
+            if ($n++ >= $limit) {
+                break;
+            }
+            $h .= '<dt><strong>' . e((string) $q) . '</strong></dt><dd>' . e((string) $a) . '</dd>';
+        }
+        return $h . '</dl>';
+    }
+
+    public static function testimonials(array $list, int $limit = 3): string
+    {
+        $h = '';
+        $n = 0;
+        foreach ($list as [$author, $meta, $quote]) {
+            if ($n++ >= $limit) {
+                break;
+            }
+            $h .= '<blockquote><p>“' . e((string) $quote) . '”</p><footer>' . e((string) $author) . '</footer></blockquote>';
+        }
+        return $h;
+    }
+
+    public static function hero(string $eyebrow, string $h1, string $lead = '', string $ctaHref = '', string $ctaLabel = ''): string
+    {
+        $h = '<header><div class="wrap">';
+        if ($eyebrow !== '') {
+            $h .= '<span class="eyebrow">' . e($eyebrow) . '</span>';
+        }
+        $h .= '<h1>' . e($h1) . '</h1>';
+        if ($lead !== '') {
+            $h .= '<p>' . e($lead) . '</p>';
+        }
+        if ($ctaHref !== '') {
+            $h .= '<p><a class="btn btn-gold" href="' . e($ctaHref) . '">' . e($ctaLabel) . '</a></p>';
+        }
+        return $h . '</div></header>';
+    }
+}
+
+}
 
 final class View
 {

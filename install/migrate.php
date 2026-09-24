@@ -106,6 +106,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
             $steps[] = $seoCount . ' SEO metadata statements applied (keyword-first titles).';
         }
 
+        // 2026_09_24 — notifications.read_at: the mobile API marks
+        // notifications as read via this column, but no schema ever created
+        // it (fatal 1054 in api/mobile/action.php). Idempotent.
+        foreach (ensure_notifications_read_at() as $line) {
+            $steps[] = $line;
+        }
+
         // Anything the SQL seed could not cover on a database that already has
         // users: make sure the administrator is also a chat agent, and that the
         // chat settings exist even on an older snapshot.
@@ -123,6 +130,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $isAdmin && csrf_check()
 }
 
 /* ------------------------------------------------------------------ logic */
+
+/** notifications.read_at — used by the mobile API's mark-as-read endpoint. */
+function ensure_notifications_read_at(): array
+{
+    if (!DB::tableExists('notifications')) {
+        return ['notifications table missing — core schema first; read_at skipped.'];
+    }
+    if (DB::columnExists('notifications', 'read_at')) {
+        return ['notifications.read_at already in place.'];
+    }
+    try {
+        DB::run('ALTER TABLE notifications ADD COLUMN read_at DATETIME NULL DEFAULT NULL');
+        return ['notifications.read_at added (mobile API mark-as-read fixed).'];
+    } catch (Throwable $e) {
+        return ['notifications.read_at could not be added: ' . $e->getMessage()];
+    }
+}
 
 /** Execute a .sql file statement by statement. Returns the statement count. */
 function run_migration(string $path): int
