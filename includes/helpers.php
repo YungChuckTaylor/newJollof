@@ -61,20 +61,40 @@ function url(string $path = ''): string
 /** Build a fully-qualified site URL: absolute_url('confirm.php') → https://example.com/confirm.php */
 function absolute_url(string $path = ''): string
 {
-    $rel = url($path);
-    if (preg_match('~^https?://~i', $rel)) {
-        return $rel;
+    // Already a fully-qualified URL — leave it untouched.
+    if ($path !== '' && preg_match('~^https?://~i', $path)) {
+        return $path;
     }
+
+    $bp = base_path(); // '' at the domain root, or '/jollof' inside a sub-folder
+
+    // Normalise to a path relative to the site root. Callers pass either a
+    // root-relative path ('/assets/…') or one already prefixed with the
+    // base_path (the output of View::imgUrl(), e.g. '/jollof/assets/…').
+    // Strip a leading base_path so the sub-folder segment is never duplicated.
+    $p = $path === '' ? '' : '/' . ltrim($path, '/');
+    if ($bp !== '' && $p !== '' && strpos($p, $bp . '/') === 0) {
+        $p = substr($p, strlen($bp));
+    }
+
+    // Scheme + host. Use ONLY the origin (scheme://host) of the configured
+    // site URL: a common mistake is to include the sub-folder in site.url,
+    // which would otherwise duplicate it. The sub-folder is added exactly
+    // once here, via base_path().
+    $origin = '';
     $cfgRoot = trim((string) config('site.url', ''));
-    if ($cfgRoot !== '' && preg_match('~^https?://~i', $cfgRoot)) {
-        return rtrim($cfgRoot, '/') . '/' . ltrim($rel, '/');
+    if ($cfgRoot !== '' && preg_match('~^(https?://[^/]+)~i', $cfgRoot, $m)) {
+        $origin = $m[1];
     }
-    $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
-        || (($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')
-        ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    return $proto . '://' . $host . $rel;
+    if ($origin === '') {
+        $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+            || (($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')
+            ? 'https' : 'http';
+        $origin = $proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    }
+
+    return $origin . $bp . $p;
 }
 
 /** Asset URL with a cache-busting stamp. */
