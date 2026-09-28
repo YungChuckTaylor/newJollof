@@ -102,5 +102,14 @@ require_once JL_INC . '/mailer.php';
 require_once JL_INC . '/verify.php';
 require_once JL_INC . '/concierge.php';
 
+/* ---------------------------------------------------- SSR builders */
+/* Load the server-side-rendering builders here, directly and exactly once,
+   rather than relying on view.php's conditional loader. Some hosts (notably
+   newer PHP + OPcache builds) skip view.php's `is_file()`/`require_once`
+   branch, which leaves the SSR class undefined and fatals every page with
+   "Class SSR not found". ssr.php is self-contained and idempotent
+   (it guards on class_exists), so loading it here is always safe. */
+require_once JL_INC . '/ssr.php';
+
 /* ------------------------------------------------------------ session */
 Auth::startSession();
