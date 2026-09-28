@@ -434,7 +434,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
 /* ---------- footer ---------- */
 footer{background:var(--bg-3);border-top:1px solid var(--line-soft);margin-top:44px}
 .foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:38px;padding:64px 0 42px}
-.foot-grid .brand img,#footLogo{height:56px;margin-bottom:16px}
+.foot-grid .brand img,#footLogo{height:56px;width:auto;object-fit:contain;margin-bottom:16px}
 .foot-grid p{font-size:13.5px;color:var(--ink-soft);max-width:30ch}
 .foot-grid h4{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:16px;font-family:var(--fs-sans);font-weight:500}
 .foot-grid ul{list-style:none;display:grid;gap:10px}
