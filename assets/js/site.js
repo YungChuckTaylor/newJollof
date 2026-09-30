@@ -3633,6 +3633,18 @@ function pHelp(q){
       <button class="tab ${filter==="all"?"active":""}" data-hc="all">All</button>
       ${HELP_CATEGORIES.map(c=>`<button class="tab ${filter===c.id?"active":""}" data-hc="${c.id}">${c.name}</button>`).join("")}
     </div>
+    ${filter==="booking" ? `<div class="panel help-article" style="margin-bottom:20px;border-color:var(--accent)">
+      <div class="eyebrow">Booking &amp; reservations guide</div>
+      <h2 style="font-size:28px;margin:6px 0 8px">Plan, pay for and manage your stay</h2>
+      <p class="muted" style="font-size:15px">A practical guide to choosing dates, understanding booking status, managing changes and getting support.</p>
+      <div class="grid-2" style="margin-top:16px">
+        <div><h3 style="font-size:18px">Before you reserve</h3><p class="small">Review availability, capacity, amenities, house rules, cancellation policy and whether the residence is Instant Book. Enter your dates, guests and any add-ons, then check the total before submitting.</p></div>
+        <div><h3 style="font-size:18px">After checkout</h3><p class="small">Instant Book reservations confirm after payment. Other requests remain pending until the host responds. Your reference and status are available in your confirmation and under Trips.</p></div>
+        <div><h3 style="font-size:18px">Changes and cancellation</h3><p class="small">Use the reservation actions in Trips to request a change or cancel. The residence policy controls the refund, so check the policy shown on your reservation.</p></div>
+        <div><h3 style="font-size:18px">Need help?</h3><p class="small">Start live chat or open the dispute centre with your reservation reference. For stays of 30 nights or more, split payment may be available when shown at checkout.</p></div>
+      </div>
+      <a class="btn btn-gold btn-sm" style="margin-top:16px" href="${URL("assets/downloads/jollof-bookings-reservations.pdf")}" download>Download the complete guide (PDF) ${I.doc}</a>
+    </div>` : ""}
     <div class="faq-list reveal" id="faqList">${shown.map(f=>faqItem(f[0],f[1])).join("")||`<div class="empty-state">${I.search}<b>No results</b>Try “escrow”, “cancel” or “referral”.</div>`}</div>
     <div class="grid-3" style="margin-top:30px">
       ${[["chat","24/7 live chat","Chat with the team or Jollof AI",URL("/concierge")],["phone","Call us","+234 700 JOLLOF (24/7)",URL("/concierge")],["send","Email support","care@jollofliving.com",URL("/concierge")]].map(c=>`
